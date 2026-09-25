@@ -1,0 +1,152 @@
+name: Build and release macOS installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version for the development artifact"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            version="${TAG_NAME#v}"
+          else
+            version="$INPUT_VERSION"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use MAJOR.MINOR.PATCH; got: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Require public-release credentials
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          P12_BASE64: ${{ secrets.APPLE_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_SIGNING_P12_PASSWORD }}
+          APP_IDENTITY: ${{ secrets.APPLE_APP_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          missing=0
+          for value in "$P12_BASE64" "$P12_PASSWORD" "$APP_IDENTITY" "$INSTALLER_IDENTITY" \
+            "$NOTARY_APPLE_ID" "$NOTARY_TEAM_ID" "$NOTARY_PASSWORD"; do
+            if [[ -z "$value" ]]; then missing=1; fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            echo "A tagged release requires all Apple signing and notarization secrets documented in README.md." >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificates
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          P12_BASE64: ${{ secrets.APPLE_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_SIGNING_P12_PASSWORD }}
+          APP_IDENTITY: ${{ secrets.APPLE_APP_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ secrets.APPLE_INSTALLER_IDENTITY }}
+        run: |
+          keychain_path="$RUNNER_TEMP/agent-watcher.keychain-db"
+          keychain_password="$(uuidgen)$(uuidgen)"
+          certificate_path="$RUNNER_TEMP/agent-watcher-signing.p12"
+
+          printf '%s' "$P12_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+
+          echo "APPLE_APP_IDENTITY=$APP_IDENTITY" >> "$GITHUB_ENV"
+          echo "APPLE_INSTALLER_IDENTITY=$INSTALLER_IDENTITY" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+
+      - name: Build universal installer
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash build-macos.sh
+
+      - name: Notarize and staple installer
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          package="dist/Agent-Watcher-$VERSION.pkg"
+          xcrun notarytool submit "$package" \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" \
+            --password "$NOTARY_PASSWORD" \
+            --wait
+          xcrun stapler staple "$package"
+          xcrun stapler validate "$package"
+          pkgutil --check-signature "$package"
+          spctl --assess --verbose=2 --type install "$package"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/Agent-Watcher-${{ steps.version.outputs.version }}.pkg
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          package="dist/Agent-Watcher-$VERSION.pkg"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$package" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$package" --generate-notes --verify-tag
+          fi
+
+      - name: Delete temporary signing keychain
+        if: always() && github.ref_type == 'tag'
+        shell: bash
+        run: |
+          if [[ -n "${SIGNING_KEYCHAIN:-}" && -f "$SIGNING_KEYCHAIN" ]]; then
+            security delete-keychain "$SIGNING_KEYCHAIN"
+          fi

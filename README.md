@@ -57,7 +57,19 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 
 Ended activities and snapshots untouched for 12 hours do not count as active. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
 
-## Install and build
+## Install from GitHub Releases
+
+Users do not need Xcode, Python, or external hardware:
+
+1. Open the repository's **Releases** page.
+2. Download `Agent-Watcher-x.y.z.pkg` from the latest release. Do not download GitHub's automatic **Source code** archives for installation.
+3. Double-click the `.pkg` and complete macOS Installer.
+4. Open **Agent Watcher** from `/Applications`.
+5. For the built-in Codex CLI integration, run `/hooks` once in Codex and review/trust the installed lifecycle hooks.
+
+Tagged release packages are Developer ID signed, submitted to Apple's notary service, and stapled before they are published. Consequently, a tag build fails instead of publishing an unsigned or unnotarized public installer.
+
+## Build and release
 
 For a local build on a Mac with Xcode Command Line Tools:
 
@@ -65,9 +77,33 @@ For a local build on a Mac with Xcode Command Line Tools:
 VERSION=0.1.0 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.1.0.pkg`. On first launch the Codex adapter adds its lifecycle hooks to `~/.codex/hooks.json`, preserving existing hooks and making a backup when it changes the file. Run `/hooks` in Codex CLI to review and trust them.
+The installer is written to `dist/Agent-Watcher-0.1.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch the Codex adapter adds its lifecycle hooks to `~/.codex/hooks.json`, preserving existing hooks and making a backup when it changes the file.
 
-For public distribution, sign the app and installer with `APPLE_APP_IDENTITY` and `APPLE_INSTALLER_IDENTITY`. Unsigned local builds are intended for development and may be blocked by Gatekeeper.
+The workflow at `.github/workflows/release.yml` has two modes:
+
+- **Actions → Build and release macOS installer → Run workflow** builds a development `.pkg` and stores it as a workflow artifact for 14 days. It does not publish a GitHub Release and may be blocked by Gatekeeper.
+- Pushing a semantic-version tag such as `v0.1.0` builds, signs, notarizes, staples, validates, and publishes the `.pkg` on GitHub Releases.
+
+Configure these repository secrets under **Settings → Secrets and variables → Actions** before pushing a release tag:
+
+| Secret | Required value |
+| --- | --- |
+| `APPLE_SIGNING_P12_BASE64` | Base64-encoded `.p12` containing the Developer ID Application and Developer ID Installer certificates and their private keys |
+| `APPLE_SIGNING_P12_PASSWORD` | Password used when exporting that `.p12` |
+| `APPLE_APP_IDENTITY` | Full identity name, for example `Developer ID Application: Example (TEAMID)` |
+| `APPLE_INSTALLER_IDENTITY` | Full identity name, for example `Developer ID Installer: Example (TEAMID)` |
+| `APPLE_NOTARY_APPLE_ID` | Apple ID used for notarization |
+| `APPLE_NOTARY_TEAM_ID` | Apple Developer Team ID |
+| `APPLE_NOTARY_PASSWORD` | App-specific password for the notarization Apple ID |
+
+Create and publish a release with:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow uses the version without the `v` prefix for the package filename. It requires all seven secrets for tag builds and has `contents: write` permission so the repository's `GITHUB_TOKEN` can create or update the matching GitHub Release.
 
 ## Extension points
 
