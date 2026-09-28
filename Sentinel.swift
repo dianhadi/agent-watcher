@@ -15,6 +15,7 @@ extension ActivitySnapshot {
         case .needsAttention: return "exclamationmark.circle.fill"
         case .running: return "bolt.fill"
         case .idle: return "pause.fill"
+        case .ended: return "checkmark.circle.fill"
         default: return "questionmark.circle"
         }
     }
@@ -76,6 +77,11 @@ extension ActivitySnapshot {
     }
 
     var activitySummary: ActivitySummary { ActivitySummary(activities: activities) }
+    var visibleActivities: [ActivitySnapshot] {
+        activities.filter { activity in
+            activity.state != .ended || Date().timeIntervalSince(activity.updatedAt) < 10 * 60
+        }
+    }
     func count(_ state: ActivityState) -> Int { activitySummary.count(state) }
     var signal: AttentionSignal { activitySummary.signal }
     var summary: String {
@@ -119,6 +125,7 @@ struct Counter: View {
 
 struct UsageCard: View {
     let usage: AgentUsageSnapshot
+    @State private var showsAdditionalLimits = false
 
     private func color(for remaining: Double) -> Color {
         if remaining <= 15 { return .red }
@@ -126,11 +133,36 @@ struct UsageCard: View {
         return .green
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var primary: UsageWindow? {
+        usage.windows.first { $0.durationMinutes == 300 } ?? usage.windows.first
+    }
+
+    private var additional: [UsageWindow] {
+        guard let primary else { return usage.windows }
+        return usage.windows.filter { $0.id != primary.id }
+    }
+
+    private func limitRow(_ window: UsageWindow, showsName: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Label("\(usage.sourceName) usage", systemImage: "gauge.with.dots.needle.50percent")
-                    .font(.headline)
+                if showsName { Text(window.name).font(.subheadline.bold()) }
+                Text("\(Int(window.remainingPercent.rounded()))% remaining")
+                    .font(.subheadline.monospacedDigit())
+                Spacer()
+                Text("Resets \(window.resetsAt, style: .relative)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: window.remainingPercent, total: 100)
+                .tint(color(for: window.remainingPercent))
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("5-hour limit", systemImage: "gauge.with.dots.needle.50percent")
+                    .font(.subheadline.bold())
                 Spacer()
                 if let plan = usage.planName, !plan.isEmpty {
                     Text(plan.capitalized)
@@ -141,24 +173,108 @@ struct UsageCard: View {
                         .background(.quaternary.opacity(0.6), in: Capsule())
                 }
             }
-            ForEach(usage.windows) { window in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack {
-                        Text(window.name).font(.subheadline.bold())
-                        Spacer()
-                        Text("\(Int(window.remainingPercent.rounded()))% remaining")
-                            .font(.subheadline.monospacedDigit())
+            if let primary {
+                limitRow(primary, showsName: false)
+            }
+            if !additional.isEmpty {
+                DisclosureGroup("Additional limits", isExpanded: $showsAdditionalLimits) {
+                    VStack(spacing: 8) {
+                        ForEach(additional) { window in
+                            limitRow(window, showsName: true)
+                        }
                     }
-                    ProgressView(value: window.remainingPercent, total: 100)
-                        .tint(color(for: window.remainingPercent))
-                    Text("Resets \(window.resetsAt, style: .relative)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .padding(.top, 6)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct ActivityCard: View {
+    let activity: ActivitySnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: activity.symbol)
+                    .foregroundStyle(activity.tint)
+                Text(activity.project)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            Text(activity.sourceName)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            if !activity.workspace.isEmpty {
+                Text(activity.workspace)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            HStack {
+                Text(String(activity.id.prefix(8)))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text(activity.updatedAt, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(.background, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.quaternary, lineWidth: 1)
+        }
+        .help("Source: \(activity.sourceName)\nActivity: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
+    }
+}
+
+struct ActivityColumn: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let color: Color
+    let activities: [ActivitySnapshot]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: symbol).foregroundStyle(color)
+                Text(title).font(.headline)
+                Spacer()
+                Text("\(activities.count)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.quaternary, in: Capsule())
+            }
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    if activities.isEmpty {
+                        Text("No activities")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, minHeight: 70)
+                    }
+                    ForEach(activities) { activity in
+                        ActivityCard(activity: activity)
+                    }
                 }
             }
         }
-        .padding(14)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+        .padding(12)
+        .frame(minWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -203,40 +319,27 @@ struct Dashboard: View {
                     UsageCard(usage: usage)
                 }
             }
-            HStack {
-                Text("Agent activity").font(.title3.bold())
-                Spacer()
-                Button("Refresh") { store.refresh() }
-            }
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    if store.activities.isEmpty {
-                        Text("No activity yet. Connect and run an AI agent.")
-                            .frame(maxWidth: .infinity, minHeight: 130)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(store.activities) { activity in
-                        HStack(spacing: 12) {
-                            Image(systemName: activity.symbol).foregroundStyle(activity.tint)
-                                .frame(width: 34, height: 34)
-                                .background(activity.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(activity.project).font(.headline)
-                                Text(activity.sourceName + " · " + (activity.workspace.isEmpty ? String(activity.id.prefix(8)) : activity.workspace))
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text(activity.title).foregroundStyle(activity.tint)
-                                Text(activity.updatedAt, style: .relative)
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(12)
-                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-                        .help("Source: \(activity.sourceName)\nActivity: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
-                    }
+            Text("Agent board").font(.title3.bold())
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    ActivityColumn(
+                        title: "Backlog", subtitle: "Idle", symbol: "pause.fill", color: .blue,
+                        activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .idle }
+                    )
+                    ActivityColumn(
+                        title: "In Development", subtitle: "Running", symbol: "bolt.fill", color: .green,
+                        activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .running }
+                    )
+                    ActivityColumn(
+                        title: "Blocker", subtitle: "Needs attention", symbol: "exclamationmark.circle.fill", color: .yellow,
+                        activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .needsAttention }
+                    )
+                    ActivityColumn(
+                        title: "Ended", subtitle: "Visible for 10 minutes", symbol: "checkmark.circle.fill", color: .gray,
+                        activities: store.visibleActivities.filter { $0.state == .ended }
+                    )
                 }
+                .frame(minHeight: 230)
             }
             Divider()
             HStack(spacing: 14) {
@@ -284,7 +387,7 @@ struct MenuContents: View {
                 Text("\(window.name): \(Int(window.remainingPercent.rounded()))% remaining")
             }
         }
-        ForEach(store.activities.prefix(8)) { activity in
+        ForEach(store.visibleActivities.prefix(8)) { activity in
             Label("\(activity.project) · \(activity.title)", systemImage: activity.symbol)
         }
         Divider()
