@@ -79,7 +79,10 @@ extension ActivitySnapshot {
     var activitySummary: ActivitySummary { ActivitySummary(activities: activities) }
     var visibleActivities: [ActivitySnapshot] {
         activities.filter { activity in
-            activity.state != .ended || Date().timeIntervalSince(activity.updatedAt) < 10 * 60
+            if activity.state == .ended {
+                return Date().timeIntervalSince(activity.updatedAt) < 10 * 60
+            }
+            return activitySummary.currentState(of: activity) != .unknown
         }
     }
     func count(_ state: ActivityState) -> Int { activitySummary.count(state) }
@@ -296,15 +299,6 @@ struct Dashboard: View {
         case .inactive: return .gray.opacity(0.25)
         }
     }
-    private var indicatorLabel: String {
-        switch store.signal {
-        case .fullAttention: return "Needs attention"
-        case .partialAttention: return "Some need attention"
-        case .active: return "Running"
-        case .idle: return "Idle"
-        case .inactive: return "Inactive"
-        }
-    }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {
@@ -313,8 +307,19 @@ struct Dashboard: View {
                     Text("AI agent activity on this Mac").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Label(store.summary, systemImage: store.icon)
-                    .padding(10).background(.quaternary.opacity(0.5), in: Capsule())
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    let blinks = [AttentionSignal.active, .partialAttention].contains(store.signal)
+                    let isLit = !blinks || Int(context.date.timeIntervalSince1970 * 2) % 2 == 0
+                    HStack(spacing: 7) {
+                        Image(systemName: store.icon)
+                            .foregroundStyle(isLit ? indicatorColor : .gray.opacity(0.2))
+                        Text(store.summary)
+                    }
+                    .padding(10)
+                    .background(.quaternary.opacity(0.5), in: Capsule())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(store.summary)
+                }
             }
             Text("Agent board").font(.title3.bold())
             GeometryReader { geometry in
@@ -352,22 +357,6 @@ struct Dashboard: View {
                 }
             }
             Divider()
-            HStack(spacing: 14) {
-                Image(systemName: "lightbulb.2.fill").font(.title2).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Status indicator").font(.headline)
-                    Text("No external device required")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    let visible = ![AttentionSignal.active, .partialAttention].contains(store.signal)
-                        || Int(context.date.timeIntervalSince1970 * 2) % 2 == 0
-                    Circle().fill(visible ? indicatorColor : .gray.opacity(0.2))
-                        .frame(width: 22, height: 22)
-                }
-                Text(indicatorLabel)
-            }
             HStack(spacing: 8) {
                 Image(systemName: "link")
                 Text(store.integrationStatus.values.sorted().joined(separator: " · ")).font(.caption)

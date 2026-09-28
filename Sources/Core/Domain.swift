@@ -71,13 +71,21 @@ enum AttentionSignal: String {
 struct ActivitySummary {
     let activities: [ActivitySnapshot]
 
+    /// A running snapshot is a heartbeat, not proof that the originating
+    /// process is still alive. Hooks can miss their closing event after a
+    /// crash, cancellation, quota failure, or machine sleep.
+    private let runningHeartbeatLifetime: TimeInterval = 10 * 60
+    private let retainedStateLifetime: TimeInterval = 12 * 3600
+
     func count(_ state: ActivityState) -> Int {
         activities.filter { currentState(of: $0) == state }.count
     }
 
     func currentState(of activity: ActivitySnapshot, now: Date = Date()) -> ActivityState {
         guard activity.state != .ended else { return .ended }
-        return now.timeIntervalSince(activity.updatedAt) > 12 * 3600 ? .unknown : activity.state
+        let age = now.timeIntervalSince(activity.updatedAt)
+        if activity.state == .running, age > runningHeartbeatLifetime { return .unknown }
+        return age > retainedStateLifetime ? .unknown : activity.state
     }
 
     var signal: AttentionSignal {

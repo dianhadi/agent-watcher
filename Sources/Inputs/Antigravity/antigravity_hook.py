@@ -50,6 +50,8 @@ def main():
 
         if event == "SessionStart":
             state = "idle"
+        elif event == "SessionEnd":
+            state = "ended"
         elif event in ("PreInvocation", "PostInvocation"):
             state = "running"
         elif event == "PreToolUse":

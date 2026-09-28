@@ -73,7 +73,7 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 | All active items are idle | `idle` | Solid blue |
 | No active items | `inactive` | Off |
 
-Ended activities and snapshots untouched for 12 hours do not count as active. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
+Ended activities and snapshots untouched for 12 hours do not count as active. A `running` snapshot without another heartbeat for 10 minutes is treated as stale and hidden; this prevents a missed close hook after a crash, cancellation, quota failure, or machine sleep from leaving a ghost activity. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
 
 The dashboard presents activities as a board: idle work appears in **Backlog**, running work in **In Development**, attention requests in **Blocker**, and completed work in **Ended**. Ended cards are automatically removed from the board and menu after 10 minutes; no manual refresh is required.
 

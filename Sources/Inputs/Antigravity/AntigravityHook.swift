@@ -62,6 +62,8 @@ do {
     switch event {
     case "SessionStart":
         state = "idle"
+    case "SessionEnd":
+        state = "ended"
     case "PreInvocation", "PostInvocation":
         state = "running"
     case "PreToolUse":

@@ -36,6 +36,9 @@ struct AntigravityIntegration: AgentIntegration {
             "SessionStart": [
                 ["type": "command", "command": "\(commandPath) SessionStart", "timeout": 3]
             ],
+            "SessionEnd": [
+                ["type": "command", "command": "\(commandPath) SessionEnd", "timeout": 3]
+            ],
             "PreInvocation": [
                 ["type": "command", "command": "\(commandPath) PreInvocation", "timeout": 3]
             ],
