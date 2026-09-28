@@ -103,26 +103,6 @@ extension ActivitySnapshot {
     }
 }
 
-struct Counter: View {
-    let number: Int
-    let name: String
-    let symbol: String
-    let color: Color
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).foregroundStyle(color).font(.title2)
-            VStack(alignment: .leading) {
-                Text("\(number)").font(.title2.bold())
-                Text(name).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
-    }
-}
-
 struct UsageCard: View {
     let usage: AgentUsageSnapshot
     @State private var showsAdditionalLimits = false
@@ -273,7 +253,7 @@ struct ActivityColumn: View {
             }
         }
         .padding(12)
-        .frame(minWidth: 190, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -309,37 +289,37 @@ struct Dashboard: View {
                 Label(store.summary, systemImage: store.icon)
                     .padding(10).background(.quaternary.opacity(0.5), in: Capsule())
             }
-            HStack(spacing: 12) {
-                Counter(number: store.count(.needsAttention), name: "Needs attention", symbol: "exclamationmark.circle.fill", color: .yellow)
-                Counter(number: store.count(.running), name: "Running", symbol: "bolt.fill", color: .green)
-                Counter(number: store.count(.idle), name: "Idle", symbol: "pause.fill", color: .blue)
-            }
-            ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
-                if let usage = store.usageBySource[sourceID] {
-                    UsageCard(usage: usage)
-                }
-            }
             Text("Agent board").font(.title3.bold())
-            ScrollView(.horizontal) {
+            GeometryReader { geometry in
+                let columnWidth = max(0, (geometry.size.width - 36) / 4)
                 HStack(alignment: .top, spacing: 12) {
                     ActivityColumn(
-                        title: "Backlog", subtitle: "Idle", symbol: "pause.fill", color: .blue,
+                        title: "Idle", subtitle: "Waiting for work", symbol: "pause.fill", color: .blue,
                         activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .idle }
                     )
+                    .frame(width: columnWidth)
                     ActivityColumn(
-                        title: "In Development", subtitle: "Running", symbol: "bolt.fill", color: .green,
-                        activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .running }
-                    )
-                    ActivityColumn(
-                        title: "Blocker", subtitle: "Needs attention", symbol: "exclamationmark.circle.fill", color: .yellow,
+                        title: "Needs Attention", subtitle: "Waiting for input", symbol: "exclamationmark.circle.fill", color: .yellow,
                         activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .needsAttention }
                     )
+                    .frame(width: columnWidth)
+                    ActivityColumn(
+                        title: "Running", subtitle: "Work in progress", symbol: "bolt.fill", color: .green,
+                        activities: store.visibleActivities.filter { store.activitySummary.currentState(of: $0) == .running }
+                    )
+                    .frame(width: columnWidth)
                     ActivityColumn(
                         title: "Ended", subtitle: "Visible for 10 minutes", symbol: "checkmark.circle.fill", color: .gray,
                         activities: store.visibleActivities.filter { $0.state == .ended }
                     )
+                    .frame(width: columnWidth)
                 }
-                .frame(minHeight: 230)
+            }
+            .frame(minHeight: 230)
+            ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
+                if let usage = store.usageBySource[sourceID] {
+                    UsageCard(usage: usage)
+                }
             }
             Divider()
             HStack(spacing: 14) {

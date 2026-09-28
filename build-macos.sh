@@ -8,7 +8,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 stage="$work/root"
 app="$stage/Applications/Agent Watcher.app"
-mkdir -p "$app/Contents/MacOS" dist
+icon_source="assets/logo.png"
+[[ -f "$icon_source" ]] || { echo "Missing application icon: $icon_source" >&2; exit 1; }
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" dist
 sdk="$(xcrun --sdk macosx --show-sdk-path)"
 
 cat > "$app/Contents/Info.plist" <<PLIST
@@ -20,12 +22,28 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleDisplayName</key><string>Agent Watcher</string>
 <key>CFBundleExecutable</key><string>AgentWatcher</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>CFBundleShortVersionString</key><string>$version</string>
 <key>CFBundleVersion</key><string>$version</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+
+icon_images="$work/AppIcon"
+mkdir -p "$icon_images"
+for size in 16 32 64 128 256 512 1024; do
+    sips -z "$size" "$size" "$icon_source" --out "$icon_images/$size.png" >/dev/null
+done
+/usr/bin/ruby -e '
+  directory, output = ARGV
+  types = {16=>"icp4", 32=>"icp5", 64=>"icp6", 128=>"ic07", 256=>"ic08", 512=>"ic09", 1024=>"ic10"}
+  body = types.map do |size, type|
+    png = File.binread(File.join(directory, "#{size}.png"))
+    type + [png.bytesize + 8].pack("N") + png
+  end.join
+  File.binwrite(output, "icns" + [body.bytesize + 8].pack("N") + body)
+' "$icon_images" "$app/Contents/Resources/AppIcon.icns"
 
 for arch in arm64 x86_64; do
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift Sentinel.swift HookRegistration.swift -o "$work/app-$arch"
