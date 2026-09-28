@@ -108,9 +108,23 @@ struct UsageCard: View {
     @State private var showsAdditionalLimits = false
 
     private func color(for remaining: Double) -> Color {
-        if remaining <= 15 { return .red }
-        if remaining <= 35 { return .yellow }
+        if remaining < 20 { return .red }
+        if remaining < 50 { return .yellow }
         return .green
+    }
+
+    private func progressBar(for window: UsageWindow) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.gray.opacity(0.2))
+                Capsule()
+                    .fill(color(for: window.remainingPercent))
+                    .frame(width: geometry.size.width * window.remainingPercent / 100)
+            }
+        }
+        .frame(height: 6)
+        .accessibilityLabel("\(window.name) quota")
+        .accessibilityValue("\(Int(window.remainingPercent.rounded())) percent remaining")
     }
 
     private var primary: UsageWindow? {
@@ -133,8 +147,7 @@ struct UsageCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            ProgressView(value: window.remainingPercent, total: 100)
-                .tint(color(for: window.remainingPercent))
+            progressBar(for: window)
         }
     }
 
