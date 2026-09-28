@@ -23,6 +23,21 @@ agent-native events -> AgentIntegration adapter -> ActivitySnapshot
 - The window and menu bar render that signal. Optional hardware or notification adapters implement `ActivityOutput`; none is required.
 - Integrations can optionally provide account-level allowance data through `AgentUsageProvider`; usage is not modeled as a per-session quota when sessions share the same account limit.
 
+Source files follow those boundaries directly:
+
+```text
+Sources/
+├── Inputs/                AI-agent-specific adapters
+│   ├── Codex/
+│   └── Antigravity/
+├── Core/                  agent- and device-neutral domain logic
+├── App/                   macOS store, menu bar, and dashboard UI
+└── Outputs/               optional device/notification adapters
+```
+
+Dependencies point inward: inputs and outputs may use `Core`, while `Core`
+must never import concepts from a specific agent or external device.
+
 The application icon source is `assets/logo.png`. The build script generates the complete macOS `.icns` resource automatically.
 
 The supported states are `needs_attention`, `running`, `idle`, `ended`, and `unknown`. Snapshot schema version 1 looks like this:

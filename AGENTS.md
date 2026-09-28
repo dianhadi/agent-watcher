@@ -8,15 +8,11 @@ The application targets macOS 13 or later and is built directly with `swiftc`; t
 
 ## Architecture
 
-- `Domain.swift` contains agent-neutral activity, status, usage, integration, and output contracts.
-- `Sentinel.swift` contains the SwiftUI application, observable store, menu bar, board, and presentation logic.
-- `HookRegistration.swift` is the Codex CLI integration installer.
-- `CodexHook.swift` translates Codex lifecycle events into neutral activity snapshots.
-- `CodexUsage.swift` reads Codex usage metadata on a best-effort basis.
-- `hook.py` is a development/reference implementation of the Codex event translator.
-- `AntigravityIntegration.swift` is the Antigravity integration installer.
-- `AntigravityHook.swift` translates Antigravity lifecycle events into neutral activity snapshots.
-- `antigravity_hook.py` is a development/reference implementation of the Antigravity event translator.
+- `Sources/Core/Domain.swift` contains agent-neutral activity, status, usage, integration, and output contracts.
+- `Sources/App/Sentinel.swift` contains the SwiftUI application, observable store, menu bar, board, and presentation logic.
+- `Sources/Inputs/Codex/` contains the Codex installer, event translator, usage reader, and reference Python hook.
+- `Sources/Inputs/Antigravity/` contains the Antigravity installer, event translator, usage reader, and reference Python hook.
+- `Sources/Outputs/` contains optional device, notification, or other status-destination adapters.
 - `build-macos.sh` builds universal arm64/x86_64 binaries and the local `.pkg` installer.
 - `assets/logo.png` is the source image for the generated macOS application icon.
 

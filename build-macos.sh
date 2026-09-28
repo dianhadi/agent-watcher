@@ -46,9 +46,18 @@ done
 ' "$icon_images" "$app/Contents/Resources/AppIcon.icns"
 
 for arch in arm64 x86_64; do
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift AntigravityUsage.swift Sentinel.swift HookRegistration.swift AntigravityIntegration.swift -o "$work/app-$arch"
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" CodexHook.swift -o "$work/hook-$arch"
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" AntigravityHook.swift -o "$work/antigravity-hook-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" \
+        Sources/Core/Domain.swift \
+        Sources/Inputs/Codex/CodexUsage.swift \
+        Sources/Inputs/Antigravity/AntigravityUsage.swift \
+        Sources/App/Sentinel.swift \
+        Sources/Inputs/Codex/HookRegistration.swift \
+        Sources/Inputs/Antigravity/AntigravityIntegration.swift \
+        -o "$work/app-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" \
+        Sources/Inputs/Codex/CodexHook.swift -o "$work/hook-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" \
+        Sources/Inputs/Antigravity/AntigravityHook.swift -o "$work/antigravity-hook-$arch"
 done
 lipo -create "$work/app-arm64" "$work/app-x86_64" -output "$app/Contents/MacOS/AgentWatcher"
 lipo -create "$work/hook-arm64" "$work/hook-x86_64" -output "$app/Contents/MacOS/CodexHook"
