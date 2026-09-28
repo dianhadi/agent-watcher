@@ -105,6 +105,31 @@ protocol ActivityOutput {
     func publish(_ signal: AttentionSignal) throws
 }
 
+struct UsageWindow: Identifiable {
+    let id: String
+    let name: String
+    let usedPercent: Double
+    let durationMinutes: Int
+    let resetsAt: Date
+
+    var remainingPercent: Double { min(100, max(0, 100 - usedPercent)) }
+}
+
+/// Optional, source-level allowance. This is deliberately separate from an
+/// activity because several sessions can share the same account quota.
+struct AgentUsageSnapshot {
+    let sourceID: String
+    let sourceName: String
+    let planName: String?
+    let windows: [UsageWindow]
+    let updatedAt: Date
+}
+
+protocol AgentUsageProvider {
+    var sourceID: String { get }
+    func latestUsage() -> AgentUsageSnapshot?
+}
+
 enum StateLocation {
     static var current: URL {
         if let value = ProcessInfo.processInfo.environment["AGENT_WATCHER_STATE_DIR"] {

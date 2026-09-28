@@ -21,6 +21,7 @@ agent-native events -> AgentIntegration adapter -> ActivitySnapshot
 - `AgentIntegration` owns agent-specific setup and event translation. `CodexCLIIntegration` is currently the only implementation.
 - `ActivitySummary` converts all activities into a device-neutral `AttentionSignal`.
 - The window and menu bar render that signal. Optional hardware or notification adapters implement `ActivityOutput`; none is required.
+- Integrations can optionally provide account-level allowance data through `AgentUsageProvider`; usage is not modeled as a per-session quota when sessions share the same account limit.
 
 The supported states are `needs_attention`, `running`, `idle`, `ended`, and `unknown`. Snapshot schema version 1 looks like this:
 
@@ -56,6 +57,8 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 | No active items | `inactive` | Off |
 
 Ended activities and snapshots untouched for 12 hours do not count as active. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
+
+The Codex adapter also displays the latest five-hour and weekly allowance found in local Codex session metadata. This is a best-effort integration because the metadata format is not a public API. Agent Watcher reads only the tail of recent session files and extracts `rate_limits`; it does not retain prompts, commands, or model responses. If usage metadata is absent or changes format, activity monitoring continues without the usage card.
 
 ## Install from GitHub Releases
 
@@ -108,5 +111,3 @@ The workflow uses the version without the `v` prefix for the package filename. I
 ## Extension points
 
 To support another AI agent, implement `AgentIntegration` for setup and translate its events into the snapshot contract. To support hardware or notifications, implement `ActivityOutput` and consume `AttentionSignal` without adding device concepts to the domain.
-
-Session-window/quota information (for example a five-hour allowance) is intentionally not part of this iteration. It can later be modeled as source-provided metrics beside activity state and rendered in the menu bar without coupling the core to a particular provider.

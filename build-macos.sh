@@ -28,7 +28,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 PLIST
 
 for arch in arm64 x86_64; do
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift Sentinel.swift HookRegistration.swift -o "$work/app-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift Sentinel.swift HookRegistration.swift -o "$work/app-$arch"
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" CodexHook.swift -o "$work/hook-$arch"
 done
 lipo -create "$work/app-arm64" "$work/app-x86_64" -output "$app/Contents/MacOS/AgentWatcher"

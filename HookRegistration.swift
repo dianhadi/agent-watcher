@@ -14,7 +14,7 @@ struct CodexCLIIntegration: AgentIntegration {
         guard let executable = Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("CodexHook"),
               FileManager.default.isExecutableFile(atPath: executable.path) else {
             throw NSError(domain: "AgentWatcher", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Helper CodexHook tidak ada di paket aplikasi."])
+                          userInfo: [NSLocalizedDescriptionKey: "The CodexHook helper is missing from the application bundle."])
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let codexHome = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
@@ -27,7 +27,7 @@ struct CodexCLIIntegration: AgentIntegration {
             let bytes = try Data(contentsOf: file)
             guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
                 throw NSError(domain: "AgentWatcher", code: 2,
-                              userInfo: [NSLocalizedDescriptionKey: "Format hooks.json tidak valid."])
+                              userInfo: [NSLocalizedDescriptionKey: "hooks.json has an invalid format."])
             }
             config = object
         }
@@ -35,18 +35,18 @@ struct CodexCLIIntegration: AgentIntegration {
         if let hooksValue = config["hooks"] {
             guard let existingHooks = hooksValue as? [String: Any] else {
                 throw NSError(domain: "AgentWatcher", code: 4,
-                              userInfo: [NSLocalizedDescriptionKey: "Struktur hooks.json tidak valid."])
+                              userInfo: [NSLocalizedDescriptionKey: "hooks.json has an invalid structure."])
             }
             hooks = existingHooks
         }
         let command = shellQuote(executable.path)
         var changed = false
-        for event in events {
+        for event in Self.events {
             var groups: [[String: Any]] = []
             if let value = hooks[event] {
                 guard let existingGroups = value as? [[String: Any]] else {
                     throw NSError(domain: "AgentWatcher", code: 3,
-                                  userInfo: [NSLocalizedDescriptionKey: "Struktur hooks.\(event) tidak valid."])
+                                  userInfo: [NSLocalizedDescriptionKey: "hooks.\(event) has an invalid structure."])
                 }
                 groups = existingGroups
             }
@@ -71,7 +71,7 @@ struct CodexCLIIntegration: AgentIntegration {
             try bytes.write(to: file, options: .atomic)
             _ = chmod(file.path, 0o600)
         }
-        return changed ? "Codex CLI terhubung. Jalankan /hooks untuk mempercayainya." : "Codex CLI sudah terhubung."
+        return changed ? "Codex CLI connected. Run /hooks to review and trust it." : "Codex CLI is connected."
     }
 
     private func shellQuote(_ value: String) -> String {

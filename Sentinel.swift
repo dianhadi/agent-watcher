@@ -3,11 +3,11 @@ import SwiftUI
 extension ActivitySnapshot {
     var title: String {
         switch ActivitySummary(activities: []).currentState(of: self) {
-        case .needsAttention: return "Perlu perhatian"
-        case .running: return "Berjalan"
-        case .idle: return "Standby"
-        case .ended: return "Aktivitas berakhir"
-        default: return "Status tidak pasti"
+        case .needsAttention: return "Needs attention"
+        case .running: return "Running"
+        case .idle: return "Idle"
+        case .ended: return "Activity ended"
+        default: return "Status unknown"
         }
     }
     var symbol: String {
@@ -31,8 +31,11 @@ extension ActivitySnapshot {
 @MainActor final class ActivityStore: ObservableObject {
     @Published var activities: [ActivitySnapshot] = []
     @Published var integrationStatus: [String: String] = [:]
+    @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
     private var timer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration()]
+    private let usageProviders: [any AgentUsageProvider] = [CodexUsageProvider()]
+    private var lastUsageRefresh = Date.distantPast
 
     init() {
         installIntegrations()
@@ -47,7 +50,7 @@ extension ActivitySnapshot {
     func installIntegrations() {
         for integration in integrations {
             do { integrationStatus[integration.id] = try integration.install() }
-            catch { integrationStatus[integration.id] = "Gagal menghubungkan \(integration.displayName): " + error.localizedDescription }
+            catch { integrationStatus[integration.id] = "Failed to connect \(integration.displayName): " + error.localizedDescription }
         }
     }
 
@@ -64,6 +67,12 @@ extension ActivitySnapshot {
         activities = Dictionary(grouping: decoded, by: { $0.sourceID + ":" + $0.id })
             .compactMap { $0.value.max { $0.updatedAt < $1.updatedAt } }
             .sorted { $0.updatedAt > $1.updatedAt }
+        if Date().timeIntervalSince(lastUsageRefresh) >= 10 {
+            usageBySource = Dictionary(uniqueKeysWithValues: usageProviders.compactMap { provider in
+                provider.latestUsage().map { ($0.sourceID, $0) }
+            })
+            lastUsageRefresh = Date()
+        }
     }
 
     var activitySummary: ActivitySummary { ActivitySummary(activities: activities) }
@@ -71,11 +80,11 @@ extension ActivitySnapshot {
     var signal: AttentionSignal { activitySummary.signal }
     var summary: String {
         switch signal {
-        case .fullAttention: return "Semua aktivitas perlu perhatian"
-        case .partialAttention: return "Sebagian aktivitas perlu perhatian"
-        case .active: return "Ada aktivitas yang sedang berjalan"
-        case .inactive: return "Tidak ada aktivitas aktif"
-        case .idle: return "Semua aktivitas standby"
+        case .fullAttention: return "All activities need attention"
+        case .partialAttention: return "Some activities need attention"
+        case .active: return "An activity is running"
+        case .inactive: return "No active activities"
+        case .idle: return "All activities are idle"
         }
     }
     var icon: String {
@@ -108,6 +117,51 @@ struct Counter: View {
     }
 }
 
+struct UsageCard: View {
+    let usage: AgentUsageSnapshot
+
+    private func color(for remaining: Double) -> Color {
+        if remaining <= 15 { return .red }
+        if remaining <= 35 { return .yellow }
+        return .green
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("\(usage.sourceName) usage", systemImage: "gauge.with.dots.needle.50percent")
+                    .font(.headline)
+                Spacer()
+                if let plan = usage.planName, !plan.isEmpty {
+                    Text(plan.capitalized)
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary.opacity(0.6), in: Capsule())
+                }
+            }
+            ForEach(usage.windows) { window in
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text(window.name).font(.subheadline.bold())
+                        Spacer()
+                        Text("\(Int(window.remainingPercent.rounded()))% remaining")
+                            .font(.subheadline.monospacedDigit())
+                    }
+                    ProgressView(value: window.remainingPercent, total: 100)
+                        .tint(color(for: window.remainingPercent))
+                    Text("Resets \(window.resetsAt, style: .relative)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
 struct Dashboard: View {
     @ObservedObject var store: ActivityStore
     private var indicatorColor: Color {
@@ -121,11 +175,11 @@ struct Dashboard: View {
     }
     private var indicatorLabel: String {
         switch store.signal {
-        case .fullAttention: return "Perlu perhatian"
-        case .partialAttention: return "Sebagian perlu perhatian"
-        case .active: return "Sedang berjalan"
-        case .idle: return "Standby"
-        case .inactive: return "Tidak aktif"
+        case .fullAttention: return "Needs attention"
+        case .partialAttention: return "Some need attention"
+        case .active: return "Running"
+        case .idle: return "Idle"
+        case .inactive: return "Inactive"
         }
     }
     var body: some View {
@@ -133,26 +187,31 @@ struct Dashboard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading) {
                     Text("Agent Watcher").font(.largeTitle.bold())
-                    Text("Aktivitas AI agent di Mac ini").foregroundStyle(.secondary)
+                    Text("AI agent activity on this Mac").foregroundStyle(.secondary)
                 }
                 Spacer()
                 Label(store.summary, systemImage: store.icon)
                     .padding(10).background(.quaternary.opacity(0.5), in: Capsule())
             }
             HStack(spacing: 12) {
-                Counter(number: store.count(.needsAttention), name: "Perlu perhatian", symbol: "exclamationmark.circle.fill", color: .yellow)
-                Counter(number: store.count(.running), name: "Berjalan", symbol: "bolt.fill", color: .green)
-                Counter(number: store.count(.idle), name: "Standby", symbol: "pause.fill", color: .blue)
+                Counter(number: store.count(.needsAttention), name: "Needs attention", symbol: "exclamationmark.circle.fill", color: .yellow)
+                Counter(number: store.count(.running), name: "Running", symbol: "bolt.fill", color: .green)
+                Counter(number: store.count(.idle), name: "Idle", symbol: "pause.fill", color: .blue)
+            }
+            ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
+                if let usage = store.usageBySource[sourceID] {
+                    UsageCard(usage: usage)
+                }
             }
             HStack {
-                Text("Aktivitas agent").font(.title3.bold())
+                Text("Agent activity").font(.title3.bold())
                 Spacer()
-                Button("Perbarui") { store.refresh() }
+                Button("Refresh") { store.refresh() }
             }
             ScrollView {
                 LazyVStack(spacing: 10) {
                     if store.activities.isEmpty {
-                        Text("Belum ada aktivitas. Hubungkan dan jalankan salah satu AI agent.")
+                        Text("No activity yet. Connect and run an AI agent.")
                             .frame(maxWidth: .infinity, minHeight: 130)
                             .foregroundStyle(.secondary)
                     }
@@ -175,7 +234,7 @@ struct Dashboard: View {
                         }
                         .padding(12)
                         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-                        .help("Sumber: \(activity.sourceName)\nAktivitas: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
+                        .help("Source: \(activity.sourceName)\nActivity: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
                     }
                 }
             }
@@ -183,8 +242,8 @@ struct Dashboard: View {
             HStack(spacing: 14) {
                 Image(systemName: "lightbulb.2.fill").font(.title2).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Indikator status").font(.headline)
-                    Text("Tidak memerlukan perangkat eksternal")
+                    Text("Status indicator").font(.headline)
+                    Text("No external device required")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -200,7 +259,7 @@ struct Dashboard: View {
                 Image(systemName: "link")
                 Text(store.integrationStatus.values.sorted().joined(separator: " · ")).font(.caption)
                 Spacer()
-                Button("Coba lagi") { store.installIntegrations() }
+                Button("Retry") { store.installIntegrations() }
             }
             .foregroundStyle(.secondary)
         }
@@ -214,21 +273,29 @@ struct MenuContents: View {
     @ObservedObject var store: ActivityStore
     @Environment(\.openWindow) private var openWindow
     var body: some View {
-        Button("Buka dashboard") { openWindow(id: "dashboard") }
+        Button("Open dashboard") {
+            openWindow(id: "dashboard")
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
         Divider()
         Text(store.summary)
+        if let usage = store.usageBySource["codex-cli"] {
+            ForEach(usage.windows) { window in
+                Text("\(window.name): \(Int(window.remainingPercent.rounded()))% remaining")
+            }
+        }
         ForEach(store.activities.prefix(8)) { activity in
             Label("\(activity.project) · \(activity.title)", systemImage: activity.symbol)
         }
         Divider()
-        Button("Keluar") { NSApplication.shared.terminate(nil) }
+        Button("Quit") { NSApplication.shared.terminate(nil) }
     }
 }
 
 @main struct AgentWatcherApp: App {
     @StateObject private var store = ActivityStore()
     var body: some Scene {
-        WindowGroup("Agent Watcher", id: "dashboard") {
+        Window("Agent Watcher", id: "dashboard") {
             Dashboard(store: store)
         }
         .defaultSize(width: 780, height: 620)
