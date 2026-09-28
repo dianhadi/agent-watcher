@@ -62,7 +62,7 @@ Ended activities and snapshots untouched for 12 hours do not count as active. Ap
 
 The dashboard presents activities as a board: idle work appears in **Backlog**, running work in **In Development**, attention requests in **Blocker**, and completed work in **Ended**. Ended cards are automatically removed from the board and menu after 10 minutes; no manual refresh is required.
 
-The Codex adapter also displays the latest five-hour and weekly allowance found in local Codex session metadata. This is a best-effort integration because the metadata format is not a public API. Agent Watcher reads only the tail of recent session files and extracts `rate_limits`; it does not retain prompts, commands, or model responses. If usage metadata is absent or changes format, activity monitoring continues without the usage card.
+The Codex adapter also displays the latest five-hour and weekly allowance found in local Codex session metadata. Antigravity model allowances are read on a best-effort basis from its running local service. These metadata formats are not public APIs. Agent Watcher reads only the minimum quota fields and does not retain prompts, commands, or model responses. If usage metadata is absent or changes format, activity monitoring continues without the usage card.
 
 ## Install from GitHub Releases
 

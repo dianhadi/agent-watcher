@@ -46,7 +46,7 @@ done
 ' "$icon_images" "$app/Contents/Resources/AppIcon.icns"
 
 for arch in arm64 x86_64; do
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift Sentinel.swift HookRegistration.swift AntigravityIntegration.swift -o "$work/app-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift AntigravityUsage.swift Sentinel.swift HookRegistration.swift AntigravityIntegration.swift -o "$work/app-$arch"
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" CodexHook.swift -o "$work/hook-$arch"
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" AntigravityHook.swift -o "$work/antigravity-hook-$arch"
 done

@@ -37,9 +37,6 @@ def main():
             else:
                 event = "PreInvocation"
 
-        if event == "PreToolUse":
-            stdout_response = '{"decision": "allow"}'
-
         safe_id = "".join(c for c in conversation_id if c.isalnum() or c in "-_")
         if not safe_id:
             print(stdout_response)
@@ -57,14 +54,9 @@ def main():
             state = "running"
         elif event == "PreToolUse":
             tool_call = data.get("toolCall") or {}
-            tool_name = tool_call.get("name", "")
-            if tool_name == "ask_question":
-                state = "needs_attention"
-                detail = "ask_question"
-            else:
-                state = "running"
-                if tool_name:
-                    detail = tool_name
+            tool_name = tool_call.get("name") or data.get("tool_name") or "tool approval"
+            state = "needs_attention"
+            detail = tool_name
         elif event == "PostToolUse":
             state = "running"
         elif event == "Stop":

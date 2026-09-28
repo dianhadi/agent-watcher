@@ -35,7 +35,7 @@ extension ActivitySnapshot {
     @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
     private var timer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
-    private let usageProviders: [any AgentUsageProvider] = [CodexUsageProvider()]
+    private let usageProviders: [any AgentUsageProvider] = [CodexUsageProvider(), AntigravityUsageProvider()]
     private var lastUsageRefresh = Date.distantPast
 
     init() {
@@ -143,18 +143,32 @@ struct UsageCard: View {
                 Text("\(Int(window.remainingPercent.rounded()))% remaining")
                     .font(.subheadline.monospacedDigit())
                 Spacer()
-                Text("Resets \(window.resetsAt, style: .relative)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(resetLabel(for: window, now: context.date))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
             progressBar(for: window)
         }
     }
 
+    private func resetLabel(for window: UsageWindow, now: Date) -> String {
+        let seconds = max(0, Int(window.resetsAt.timeIntervalSince(now)))
+        if seconds == 0 { return "Reset due" }
+        let days = seconds / 86_400
+        let hours = (seconds % 86_400) / 3_600
+        let minutes = (seconds % 3_600) / 60
+        if days > 0 { return "Resets in \(days)d \(hours)h" }
+        if hours > 0 { return "Resets in \(hours)h \(minutes)m" }
+        return "Resets in \(max(1, minutes))m"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("5-hour limit", systemImage: "gauge.with.dots.needle.50percent")
+                Label("\(usage.sourceName) · 5-hour limit", systemImage: "gauge.with.dots.needle.50percent")
                     .font(.subheadline.bold())
                 Spacer()
                 if let plan = usage.planName, !plan.isEmpty {
@@ -329,9 +343,12 @@ struct Dashboard: View {
                 }
             }
             .frame(minHeight: 230)
-            ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
-                if let usage = store.usageBySource[sourceID] {
-                    UsageCard(usage: usage)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 290, maximum: 340), spacing: 12)], alignment: .leading, spacing: 12) {
+                ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
+                    if let usage = store.usageBySource[sourceID] {
+                        UsageCard(usage: usage)
+                            .frame(width: 320, alignment: .topLeading)
+                    }
                 }
             }
             Divider()

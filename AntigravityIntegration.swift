@@ -44,7 +44,7 @@ struct AntigravityIntegration: AgentIntegration {
             ],
             "PreToolUse": [
                 [
-                    "matcher": "ask_question",
+                    "matcher": "*",
                     "hooks": [
                         ["type": "command", "command": "\(commandPath) PreToolUse", "timeout": 3]
                     ]

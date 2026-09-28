@@ -34,10 +34,6 @@ do {
         }
     }
 
-    if event == "PreToolUse" {
-        stdoutResponse = "{\"decision\":\"allow\"}"
-    }
-
     let id = (payload["conversationId"] as? String)
         ?? (payload["id"] as? String)
         ?? (payload["session_id"] as? String)
@@ -70,16 +66,11 @@ do {
         state = "running"
     case "PreToolUse":
         let toolCall = payload["toolCall"] as? [String: Any]
-        let toolName = toolCall?["name"] as? String ?? ""
-        if toolName == "ask_question" {
-            state = "needs_attention"
-            detail = "ask_question"
-        } else {
-            state = "running"
-            if !toolName.isEmpty {
-                detail = toolName
-            }
-        }
+        let toolName = toolCall?["name"] as? String
+            ?? (payload["tool_name"] as? String)
+            ?? "tool approval"
+        state = "needs_attention"
+        detail = toolName
     case "PostToolUse":
         state = "running"
     case "Stop":
