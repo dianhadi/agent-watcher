@@ -14,6 +14,9 @@ The application targets macOS 13 or later and is built directly with `swiftc`; t
 - `CodexHook.swift` translates Codex lifecycle events into neutral activity snapshots.
 - `CodexUsage.swift` reads Codex usage metadata on a best-effort basis.
 - `hook.py` is a development/reference implementation of the Codex event translator.
+- `AntigravityIntegration.swift` is the Antigravity integration installer.
+- `AntigravityHook.swift` translates Antigravity lifecycle events into neutral activity snapshots.
+- `antigravity_hook.py` is a development/reference implementation of the Antigravity event translator.
 - `build-macos.sh` builds universal arm64/x86_64 binaries and the local `.pkg` installer.
 - `assets/logo.png` is the source image for the generated macOS application icon.
 
@@ -70,7 +73,7 @@ The current schema is version 1 and is stored under:
 
 Honor `AGENT_WATCHER_STATE_DIR` when set. Continue reading legacy Codex Sentinel snapshots unless a migration explicitly removes that compatibility.
 
-Hook configuration is installed in `~/.codex/hooks.json`. Preserve unrelated user hooks and back up an existing file before modifying it. Codex requires users to review and trust non-managed hooks; do not bypass that security mechanism.
+Hook configuration is installed in `~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity. Preserve unrelated user hooks and back up an existing file before modifying it. Codex and Antigravity require users to review non-managed hooks; do not bypass that security mechanism.
 
 ## UI conventions
 

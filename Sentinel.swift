@@ -34,7 +34,7 @@ extension ActivitySnapshot {
     @Published var integrationStatus: [String: String] = [:]
     @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
     private var timer: Timer?
-    private let integrations: [any AgentIntegration] = [CodexCLIIntegration()]
+    private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
     private let usageProviders: [any AgentUsageProvider] = [CodexUsageProvider()]
     private var lastUsageRefresh = Date.distantPast
 
@@ -375,9 +375,11 @@ struct MenuContents: View {
         }
         Divider()
         Text(store.summary)
-        if let usage = store.usageBySource["codex-cli"] {
-            ForEach(usage.windows) { window in
-                Text("\(window.name): \(Int(window.remainingPercent.rounded()))% remaining")
+        ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
+            if let usage = store.usageBySource[sourceID] {
+                ForEach(usage.windows) { window in
+                    Text("\(window.name): \(Int(window.remainingPercent.rounded()))% remaining")
+                }
             }
         }
         ForEach(store.visibleActivities.prefix(8)) { activity in

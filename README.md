@@ -1,6 +1,6 @@
 # Agent Watcher
 
-Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI is the first input integration; other agents can be added without changing the dashboard or status rules.
+Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI and Antigravity (Gemini) are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
 
 ## Design
 
@@ -18,7 +18,7 @@ agent-native events -> AgentIntegration adapter -> ActivitySnapshot
 ```
 
 - `ActivitySnapshot` is the persisted, agent-neutral contract. It contains an ID, source, workspace, state, optional non-sensitive detail, and timestamp.
-- `AgentIntegration` owns agent-specific setup and event translation. `CodexCLIIntegration` is currently the only implementation.
+- `AgentIntegration` owns agent-specific setup and event translation. `CodexCLIIntegration` and `AntigravityIntegration` are the built-in implementations.
 - `ActivitySummary` converts all activities into a device-neutral `AttentionSignal`.
 - The window and menu bar render that signal. Optional hardware or notification adapters implement `ActivityOutput`; none is required.
 - Integrations can optionally provide account-level allowance data through `AgentUsageProvider`; usage is not modeled as a per-session quota when sessions share the same account limit.
@@ -72,7 +72,7 @@ Users do not need Xcode, Python, or external hardware:
 2. Download `Agent-Watcher-x.y.z.pkg` from the latest release. Do not download GitHub's automatic **Source code** archives for installation.
 3. Double-click the `.pkg` and complete macOS Installer.
 4. Open **Agent Watcher** from `/Applications`.
-5. For the built-in Codex CLI integration, run `/hooks` once in Codex and review/trust the installed lifecycle hooks.
+5. For the built-in integrations, run `/hooks` in Codex CLI or Antigravity to review installed lifecycle hooks.
 
 Tagged release packages are Developer ID signed, submitted to Apple's notary service, and stapled before they are published. Consequently, a tag build fails instead of publishing an unsigned or unnotarized public installer.
 
@@ -81,10 +81,10 @@ Tagged release packages are Developer ID signed, submitted to Apple's notary ser
 For a local build on a Mac with Xcode Command Line Tools:
 
 ```sh
-VERSION=0.1.0 bash build-macos.sh
+VERSION=0.1.2 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.1.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch the Codex adapter adds its lifecycle hooks to `~/.codex/hooks.json`, preserving existing hooks and making a backup when it changes the file.
+The installer is written to `dist/Agent-Watcher-0.1.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
 
 The workflow at `.github/workflows/release.yml` has two modes:
 

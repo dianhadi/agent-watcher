@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-version="${VERSION:-0.1.1}"
+version="${VERSION:-0.1.2}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid VERSION: $version" >&2; exit 1; }
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -46,17 +46,21 @@ done
 ' "$icon_images" "$app/Contents/Resources/AppIcon.icns"
 
 for arch in arm64 x86_64; do
-    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift Sentinel.swift HookRegistration.swift -o "$work/app-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" Domain.swift CodexUsage.swift Sentinel.swift HookRegistration.swift AntigravityIntegration.swift -o "$work/app-$arch"
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" CodexHook.swift -o "$work/hook-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" AntigravityHook.swift -o "$work/antigravity-hook-$arch"
 done
 lipo -create "$work/app-arm64" "$work/app-x86_64" -output "$app/Contents/MacOS/AgentWatcher"
 lipo -create "$work/hook-arm64" "$work/hook-x86_64" -output "$app/Contents/MacOS/CodexHook"
+lipo -create "$work/antigravity-hook-arm64" "$work/antigravity-hook-x86_64" -output "$app/Contents/MacOS/AntigravityHook"
 
 if [[ -n "${APPLE_APP_IDENTITY:-}" ]]; then
     codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app/Contents/MacOS/CodexHook"
+    codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app/Contents/MacOS/AntigravityHook"
     codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app"
 else
     codesign --force --sign - "$app/Contents/MacOS/CodexHook"
+    codesign --force --sign - "$app/Contents/MacOS/AntigravityHook"
     codesign --force --sign - "$app"
 fi
 codesign --verify --deep --strict "$app"
