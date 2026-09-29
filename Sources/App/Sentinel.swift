@@ -112,6 +112,7 @@ struct UsageCard: View {
     @State private var showsAdditionalLimits = false
 
     private func color(for remaining: Double) -> Color {
+        if remaining >= 99.5 { return .blue }
         if remaining < 20 { return .red }
         if remaining < 50 { return .yellow }
         return .green
