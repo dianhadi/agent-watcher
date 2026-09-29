@@ -2,6 +2,8 @@
 
 Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI and Antigravity (Gemini) are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
 
+The Settings window controls integrations independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The Outputs section is reserved for optional destinations such as Luxafor.
+
 ## Design
 
 The app has three independent layers:
@@ -67,7 +69,7 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 
 | Agent activity | Neutral signal | Current visual treatment |
 | --- | --- | --- |
-| All active items need attention | `fullAttention` | Solid red |
+| All active items need attention | `fullAttention` | Blinking red |
 | Some items need attention | `partialAttention` | Blinking yellow |
 | At least one item is running | `active` | Blinking green |
 | All active items are idle | `idle` | Solid blue |

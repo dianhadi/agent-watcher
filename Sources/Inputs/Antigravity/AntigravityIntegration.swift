@@ -97,6 +97,50 @@ final class AntigravityIntegration: AgentIntegration {
             : "Antigravity is connected."
     }
 
+    func uninstall() throws -> String {
+        var removed = false
+        unlink("/tmp/agent-watcher-antigravity-\(getuid()).sock")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let configDirectory = ProcessInfo.processInfo.environment["GEMINI_CONFIG_DIR"].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        } ?? home.appendingPathComponent(".gemini/config", isDirectory: true)
+        let hooksFile = configDirectory.appendingPathComponent("hooks.json")
+        if FileManager.default.fileExists(atPath: hooksFile.path) {
+            let data = try Data(contentsOf: hooksFile)
+            if var config = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               config.removeValue(forKey: "agent-watcher") != nil {
+                try backUpAndWrite(config, file: hooksFile, directory: configDirectory)
+                removed = true
+            }
+        }
+
+        let settingsDirectory = home.appendingPathComponent(".gemini/antigravity-cli", isDirectory: true)
+        let settingsFile = settingsDirectory.appendingPathComponent("settings.json")
+        if FileManager.default.fileExists(atPath: settingsFile.path) {
+            let data = try Data(contentsOf: settingsFile)
+            if var settings = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let statusLine = settings["statusLine"] as? [String: Any],
+               let command = statusLine["command"] as? String,
+               command.contains("Agent Watcher.app"), command.contains("AntigravityHook"),
+               command.contains("StatusLine") {
+                settings.removeValue(forKey: "statusLine")
+                try backUpAndWrite(settings, file: settingsFile, directory: settingsDirectory)
+                removed = true
+            }
+        }
+        return removed
+            ? "Antigravity disabled. Managed configuration removed; restart agy if it is running."
+            : "Antigravity is disabled."
+    }
+
+    private func backUpAndWrite(_ object: [String: Any], file: URL, directory: URL) throws {
+        let backup = directory.appendingPathComponent(file.lastPathComponent + ".backup-" + UUID().uuidString)
+        try FileManager.default.copyItem(at: file, to: backup)
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: file, options: .atomic)
+        _ = chmod(file.path, 0o600)
+    }
+
     private func installStatusLine(executable: URL) throws -> Bool {
         let settingsDirectory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".gemini/antigravity-cli", isDirectory: true)

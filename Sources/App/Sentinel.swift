@@ -33,12 +33,21 @@ extension ActivitySnapshot {
     @Published var activities: [ActivitySnapshot] = []
     @Published var integrationStatus: [String: String] = [:]
     @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
+    @Published private(set) var enabledIntegrationIDs: Set<String> = []
     private var timer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
-    private let usageProviders: [any AgentUsageProvider] = [CodexUsageProvider(), AntigravityUsageProvider()]
+    private var usageProviders: [String: any AgentUsageProvider] = [:]
     private var lastUsageRefresh = Date.distantPast
+    private let defaults = UserDefaults.standard
 
     init() {
+        let codexKey = preferenceKey(for: "codex-cli")
+        let codexEnabled = defaults.object(forKey: codexKey) as? Bool ?? true
+        if codexEnabled { enabledIntegrationIDs.insert("codex-cli") }
+        // Antigravity is intentionally unavailable until its adapter is ready
+        // to be enabled from Settings.
+        defaults.set(false, forKey: preferenceKey(for: "antigravity"))
+        synchronizeUsageProviders()
         installIntegrations()
         refresh()
         let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
@@ -50,13 +59,43 @@ extension ActivitySnapshot {
 
     func installIntegrations() {
         for integration in integrations {
-            do { integrationStatus[integration.id] = try integration.install() }
+            do {
+                if isIntegrationEnabled(integration.id) {
+                    integrationStatus[integration.id] = try integration.install()
+                } else {
+                    integrationStatus[integration.id] = try integration.uninstall()
+                    removeSnapshots(sourceID: integration.id)
+                }
+            }
             catch { integrationStatus[integration.id] = "Failed to connect \(integration.displayName): " + error.localizedDescription }
         }
+        refresh()
+    }
+
+    func isIntegrationEnabled(_ id: String) -> Bool {
+        enabledIntegrationIDs.contains(id)
+    }
+
+    func setIntegrationEnabled(_ enabled: Bool, id: String) {
+        guard id != "antigravity" else { return }
+        defaults.set(enabled, forKey: preferenceKey(for: id))
+        if enabled { enabledIntegrationIDs.insert(id) }
+        else { enabledIntegrationIDs.remove(id) }
+        synchronizeUsageProviders()
+        guard let integration = integrations.first(where: { $0.id == id }) else { return }
+        do {
+            if enabled { integrationStatus[id] = try integration.install() }
+            else { integrationStatus[id] = try integration.uninstall() }
+            if !enabled { removeSnapshots(sourceID: id) }
+        } catch {
+            integrationStatus[id] = "Failed to update \(integration.displayName): " + error.localizedDescription
+        }
+        lastUsageRefresh = .distantPast
+        refresh()
     }
 
     func refresh() {
-        integrations.forEach { $0.maintain() }
+        integrations.filter { isIntegrationEnabled($0.id) }.forEach { $0.maintain() }
         let folders = [StateLocation.current, StateLocation.legacy]
         let files = folders.flatMap {
             (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)) ?? []
@@ -64,13 +103,15 @@ extension ActivitySnapshot {
         let decoder = JSONDecoder()
         let decoded = files.filter { $0.pathExtension == "json" }.compactMap { url -> ActivitySnapshot? in
             guard let bytes = try? Data(contentsOf: url) else { return nil }
-            return try? decoder.decode(ActivitySnapshot.self, from: bytes)
+            guard let snapshot = try? decoder.decode(ActivitySnapshot.self, from: bytes),
+                  isIntegrationEnabled(snapshot.sourceID) else { return nil }
+            return snapshot
         }
         activities = Dictionary(grouping: decoded, by: { $0.sourceID + ":" + $0.id })
             .compactMap { $0.value.max { $0.updatedAt < $1.updatedAt } }
             .sorted { $0.updatedAt > $1.updatedAt }
         if Date().timeIntervalSince(lastUsageRefresh) >= 10 {
-            usageBySource = Dictionary(uniqueKeysWithValues: usageProviders.compactMap { provider in
+            usageBySource = Dictionary(uniqueKeysWithValues: usageProviders.values.compactMap { provider in
                 provider.latestUsage().map { ($0.sourceID, $0) }
             })
             lastUsageRefresh = Date()
@@ -104,6 +145,41 @@ extension ActivitySnapshot {
         case .inactive: return "circle"
         case .idle: return "pause.circle"
         }
+    }
+
+    private func preferenceKey(for id: String) -> String {
+        "integration.\(id).enabled"
+    }
+
+    private func synchronizeUsageProviders() {
+        if isIntegrationEnabled("codex-cli") {
+            if usageProviders["codex-cli"] == nil { usageProviders["codex-cli"] = CodexUsageProvider() }
+        } else {
+            usageProviders.removeValue(forKey: "codex-cli")
+            usageBySource.removeValue(forKey: "codex-cli")
+        }
+        if isIntegrationEnabled("antigravity") {
+            if usageProviders["antigravity"] == nil { usageProviders["antigravity"] = AntigravityUsageProvider() }
+        } else {
+            usageProviders.removeValue(forKey: "antigravity")
+            usageBySource.removeValue(forKey: "antigravity")
+        }
+    }
+
+    private func removeSnapshots(sourceID: String) {
+        let decoder = JSONDecoder()
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: StateLocation.current,
+            includingPropertiesForKeys: nil
+        ) else { return }
+        for file in files where file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file),
+                  let snapshot = try? decoder.decode(ActivitySnapshot.self, from: data),
+                  snapshot.sourceID == sourceID else { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
+        activities.removeAll { $0.sourceID == sourceID }
+        usageBySource.removeValue(forKey: sourceID)
     }
 }
 
@@ -310,7 +386,7 @@ struct Dashboard: View {
                 }
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    let blinks = [AttentionSignal.active, .partialAttention].contains(store.signal)
+                    let blinks = [AttentionSignal.active, .partialAttention, .fullAttention].contains(store.signal)
                     let isLit = !blinks || Int(context.date.timeIntervalSince1970 * 2) % 2 == 0
                     HStack(spacing: 7) {
                         Image(systemName: store.icon)
@@ -384,6 +460,12 @@ struct MenuContents: View {
             openWindow(id: "dashboard")
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
+        Button("Settings…") {
+            if !NSApplication.shared.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+                _ = NSApplication.shared.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+            }
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
         Divider()
         Text(store.summary)
         ForEach(store.usageBySource.keys.sorted(), id: \.self) { sourceID in
@@ -401,6 +483,50 @@ struct MenuContents: View {
     }
 }
 
+struct AgentWatcherSettings: View {
+    @ObservedObject var store: ActivityStore
+
+    private var codexBinding: Binding<Bool> {
+        Binding(
+            get: { store.isIntegrationEnabled("codex-cli") },
+            set: { store.setIntegrationEnabled($0, id: "codex-cli") }
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section("Agents") {
+                Toggle(isOn: codexBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Codex CLI")
+                        Text("Monitor activity and account usage")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                Toggle(isOn: .constant(false)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Antigravity")
+                        Text("Temporarily unavailable")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                .disabled(true)
+            }
+            Section("Outputs") {
+                Text("No outputs configured")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(12)
+        .frame(width: 430, height: 260)
+    }
+}
+
 @main struct AgentWatcherApp: App {
     @StateObject private var store = ActivityStore()
     var body: some Scene {
@@ -410,6 +536,9 @@ struct MenuContents: View {
         .defaultSize(width: 780, height: 620)
         MenuBarExtra("Agent Watcher", systemImage: store.icon) {
             MenuContents(store: store)
+        }
+        Settings {
+            AgentWatcherSettings(store: store)
         }
     }
 }

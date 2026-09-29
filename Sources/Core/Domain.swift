@@ -103,10 +103,12 @@ protocol AgentIntegration {
     var id: String { get }
     var displayName: String { get }
     func install() throws -> String
+    func uninstall() throws -> String
     func maintain()
 }
 
 extension AgentIntegration {
+    func uninstall() throws -> String { "\(displayName) is disabled." }
     func maintain() {}
 }
 
