@@ -56,6 +56,7 @@ extension ActivitySnapshot {
     }
 
     func refresh() {
+        integrations.forEach { $0.maintain() }
         let folders = [StateLocation.current, StateLocation.legacy]
         let files = folders.flatMap {
             (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)) ?? []

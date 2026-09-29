@@ -103,6 +103,11 @@ protocol AgentIntegration {
     var id: String { get }
     var displayName: String { get }
     func install() throws -> String
+    func maintain()
+}
+
+extension AgentIntegration {
+    func maintain() {}
 }
 
 /// Optional destination for the aggregate status. The application has no
