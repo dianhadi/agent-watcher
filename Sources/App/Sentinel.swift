@@ -312,8 +312,11 @@ struct Dashboard: View {
                     let isLit = !blinks || Int(context.date.timeIntervalSince1970 * 2) % 2 == 0
                     HStack(spacing: 7) {
                         Image(systemName: store.icon)
+                            .font(.system(size: 36, weight: .semibold))
+                            .frame(width: 44, height: 44)
                             .foregroundStyle(isLit ? indicatorColor : .gray.opacity(0.2))
                         Text(store.summary)
+                            .font(.body)
                     }
                     .padding(10)
                     .background(.quaternary.opacity(0.5), in: Capsule())
