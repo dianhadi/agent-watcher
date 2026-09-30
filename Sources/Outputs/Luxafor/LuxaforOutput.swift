@@ -30,9 +30,9 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
     private static let vendorID = 0x04D8
     private static let productID = 0xF372
     private static let allLEDs: UInt8 = 0xFF
-    private static let strobeSpeed: UInt8 = 30
     private let manager: IOHIDManager
     private var lastSignal: AttentionSignal?
+    private var lastIlluminated: Bool?
     private var lastPublishDate = Date.distantPast
 
     init() {
@@ -82,19 +82,23 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
     }
 
     func publish(_ signal: AttentionSignal) throws {
-        guard hasAccess else { throw LuxaforOutputError.permissionRequired }
-        guard let device = firstDevice() else {
-            lastSignal = nil
-            throw LuxaforOutputError.disconnected
+        let now = Date()
+        let illuminated = signal.isLit(at: now)
+        let needsReassertion = now.timeIntervalSince(lastPublishDate) >= 2
+        guard signal != lastSignal || illuminated != lastIlluminated || needsReassertion else {
+            return
         }
+        try send(Self.report(for: signal, illuminated: illuminated))
+        lastSignal = signal
+        lastIlluminated = illuminated
+        lastPublishDate = now
+    }
 
-        let refreshesStrobe = signal.isBlinking
-            && Date().timeIntervalSince(lastPublishDate) >= 30
-        guard signal != lastSignal || refreshesStrobe else { return }
-
+    private func send(_ reportBytes: [UInt8]) throws {
+        guard hasAccess else { throw LuxaforOutputError.permissionRequired }
+        guard let device = firstDevice() else { throw LuxaforOutputError.disconnected }
         let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
         guard openResult == kIOReturnSuccess else {
-            lastSignal = nil
             if openResult == kIOReturnNotPermitted {
                 throw LuxaforOutputError.permissionRequired
             }
@@ -102,7 +106,7 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         }
         defer { IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone)) }
 
-        var report = Self.report(for: signal)
+        var report = reportBytes
         let writeResult = report.withUnsafeMutableBytes { bytes in
             IOHIDDeviceSetReport(
                 device,
@@ -113,11 +117,8 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
             )
         }
         guard writeResult == kIOReturnSuccess else {
-            lastSignal = nil
             throw LuxaforOutputError.writeFailed(writeResult)
         }
-        lastSignal = signal
-        lastPublishDate = Date()
     }
 
     private var hasAccess: Bool {
@@ -134,18 +135,21 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         return Unmanaged<IOHIDDevice>.fromOpaque(pointer).takeUnretainedValue()
     }
 
-    private static func report(for signal: AttentionSignal) -> [UInt8] {
+    private static func report(for signal: AttentionSignal, illuminated: Bool) -> [UInt8] {
+        if signal.isBlinking && !illuminated {
+            return solid(red: 0, green: 0, blue: 0)
+        }
         switch signal {
         case .inactive:
             return solid(red: 0, green: 0, blue: 0)
         case .idle:
             return solid(red: 0, green: 0, blue: 255)
         case .active:
-            return strobe(red: 0, green: 255, blue: 0)
+            return solid(red: 0, green: 255, blue: 0)
         case .partialAttention:
-            return strobe(red: 255, green: 255, blue: 0)
+            return solid(red: 255, green: 255, blue: 0)
         case .fullAttention:
-            return strobe(red: 255, green: 0, blue: 0)
+            return solid(red: 255, green: 0, blue: 0)
         }
     }
 
@@ -153,13 +157,4 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         [1, allLEDs, red, green, blue, 0, 0, 0]
     }
 
-    private static func strobe(red: UInt8, green: UInt8, blue: UInt8) -> [UInt8] {
-        [3, allLEDs, red, green, blue, strobeSpeed, 0, 0xFF]
-    }
-}
-
-private extension AttentionSignal {
-    var isBlinking: Bool {
-        self == .active || self == .partialAttention || self == .fullAttention
-    }
 }

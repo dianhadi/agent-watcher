@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreServices
 
 extension ActivitySnapshot {
     var title: String {
@@ -38,6 +39,7 @@ extension ActivitySnapshot {
     @Published private(set) var enabledOutputIDs: Set<String> = []
     @Published private(set) var outputErrors: [String: String] = [:]
     private var timer: Timer?
+    private var outputTimer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
     private let outputs: [any ActivityOutput]
     private let outputDeviceDetectors: [any OutputDeviceDetector]
@@ -68,6 +70,11 @@ extension ActivitySnapshot {
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
+        let outputTimer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.publishOutputs() }
+        }
+        self.outputTimer = outputTimer
+        RunLoop.main.add(outputTimer, forMode: .common)
     }
 
     func installIntegrations() {
@@ -127,6 +134,10 @@ extension ActivitySnapshot {
 
     func requestOutputAccess(_ id: String) {
         guard let detector = outputDeviceDetectors.first(where: { $0.id == id }) else { return }
+        // pkgbuild installs do not always appear in the Launch Services database
+        // immediately. TCC needs this registration before it can list the app in
+        // Privacy & Security > Input Monitoring.
+        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
         if !detector.requestAccess(),
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
             NSWorkspace.shared.open(url)
@@ -201,12 +212,15 @@ extension ActivitySnapshot {
         for output in outputs where isOutputEnabled(output.id) {
             do {
                 try output.publish(signal)
-                outputErrors.removeValue(forKey: output.id)
+                if outputErrors[output.id] != nil {
+                    outputErrors.removeValue(forKey: output.id)
+                }
             } catch {
-                outputErrors[output.id] = error.localizedDescription
+                if outputErrors[output.id] != error.localizedDescription {
+                    outputErrors[output.id] = error.localizedDescription
+                }
             }
         }
-        outputDeviceStatuses = outputDeviceDetectors.map { $0.currentStatus() }
     }
 
     private func synchronizeUsageProviders() {
@@ -444,8 +458,7 @@ struct Dashboard: View {
                 }
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                    let blinks = [AttentionSignal.active, .partialAttention, .fullAttention].contains(store.signal)
-                    let isLit = !blinks || Int(context.date.timeIntervalSince1970 * 2) % 2 == 0
+                    let isLit = store.signal.isLit(at: context.date)
                     HStack(spacing: 7) {
                         Image(systemName: store.icon)
                             .font(.system(size: 36, weight: .semibold))

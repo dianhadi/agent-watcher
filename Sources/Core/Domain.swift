@@ -66,6 +66,14 @@ enum AttentionSignal: String, Equatable {
     case active
     case partialAttention
     case fullAttention
+
+    var isBlinking: Bool {
+        self == .active || self == .partialAttention || self == .fullAttention
+    }
+
+    func isLit(at date: Date) -> Bool {
+        !isBlinking || Int(date.timeIntervalSince1970 * 2) % 2 == 0
+    }
 }
 
 struct ActivitySummary {
