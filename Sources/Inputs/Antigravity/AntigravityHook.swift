@@ -45,7 +45,13 @@ func publishUsageConnection() {
     ])
 }
 
-func writeActivitySnapshot(id: String, workspace: String, state: String, detail: String? = nil) {
+func writeActivitySnapshot(
+    id: String,
+    workspace: String,
+    state: String,
+    modelName: String? = nil,
+    detail: String? = nil
+) {
     let safeID = String(id.unicodeScalars.filter {
         CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_"
     })
@@ -56,6 +62,15 @@ func writeActivitySnapshot(id: String, workspace: String, state: String, detail:
         } ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Agent Watcher/activities", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let target = folder.appendingPathComponent(safeID + ".json")
+        let previousModelName: String? = {
+            guard modelName == nil,
+                  let bytes = try? Data(contentsOf: target),
+                  let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
+                return nil
+            }
+            return object["model_name"] as? String
+        }()
         var snapshot: [String: Any] = [
             "schema_version": 1,
             "id": id,
@@ -65,9 +80,11 @@ func writeActivitySnapshot(id: String, workspace: String, state: String, detail:
             "state": state,
             "updated_at": Date().timeIntervalSince1970
         ]
+        if let modelName = modelName ?? previousModelName, !modelName.isEmpty {
+            snapshot["model_name"] = modelName
+        }
         if let detail { snapshot["detail"] = detail }
         let bytes = try JSONSerialization.data(withJSONObject: snapshot)
-        let target = folder.appendingPathComponent(safeID + ".json")
         try bytes.write(to: target, options: .atomic)
         _ = chmod(target.path, 0o600)
     } catch {
@@ -85,15 +102,23 @@ func publishStatusLineActivity(_ payload: [String: Any]) {
         ?? payload["cwd"] as? String
         ?? ""
     let needsAttention = payload["tool_confirmation_pending"] as? Bool ?? false
+    let model = payload["model"] as? [String: Any]
+    let modelName = model?["display_name"] as? String ?? model?["id"] as? String
     if needsAttention {
-        writeActivitySnapshot(id: id, workspace: workspace, state: "needs_attention", detail: "tool approval")
+        writeActivitySnapshot(
+            id: id,
+            workspace: workspace,
+            state: "needs_attention",
+            modelName: modelName,
+            detail: "tool approval"
+        )
         return
     }
     switch payload["agent_state"] as? String {
     case "idle":
-        writeActivitySnapshot(id: id, workspace: workspace, state: "idle")
+        writeActivitySnapshot(id: id, workspace: workspace, state: "idle", modelName: modelName)
     case "thinking", "working", "tool_use", "initializing":
-        writeActivitySnapshot(id: id, workspace: workspace, state: "running")
+        writeActivitySnapshot(id: id, workspace: workspace, state: "running", modelName: modelName)
     default:
         break
     }
@@ -170,6 +195,10 @@ do {
 
     var state = "running"
     var detail: String? = nil
+    let model = payload["model"] as? [String: Any]
+    let modelName = payload["model"] as? String
+        ?? model?["display_name"] as? String
+        ?? model?["id"] as? String
 
     switch event {
     case "SessionStart":
@@ -193,7 +222,7 @@ do {
         state = "running"
     }
 
-    writeActivitySnapshot(id: id, workspace: workspace, state: state, detail: detail)
+    writeActivitySnapshot(id: id, workspace: workspace, state: state, modelName: modelName, detail: detail)
 } catch {
     // Status reporting must never block Antigravity.
 }

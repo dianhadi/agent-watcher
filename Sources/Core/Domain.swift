@@ -27,6 +27,7 @@ struct ActivitySnapshot: Decodable, Identifiable {
     let sourceName: String
     let workspace: String
     let state: ActivityState
+    let modelName: String?
     let detail: String?
     let updatedAt: Date
 
@@ -36,7 +37,7 @@ struct ActivitySnapshot: Decodable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, sourceID = "source_id", sourceName = "source_name"
-        case workspace, state, detail, updatedAt = "updated_at"
+        case workspace, state, modelName = "model_name", detail, updatedAt = "updated_at"
         // Version 0 compatibility (Codex Sentinel).
         case sessionID = "session_id", cwd, status, tool
     }
@@ -52,6 +53,7 @@ struct ActivitySnapshot: Decodable, Identifiable {
         let rawState = try values.decodeIfPresent(String.self, forKey: .state)
             ?? values.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
         state = ActivityState(snapshotValue: rawState)
+        modelName = try values.decodeIfPresent(String.self, forKey: .modelName)
         detail = try values.decodeIfPresent(String.self, forKey: .detail)
             ?? values.decodeIfPresent(String.self, forKey: .tool)
         updatedAt = Date(timeIntervalSince1970: try values.decode(Double.self, forKey: .updatedAt))

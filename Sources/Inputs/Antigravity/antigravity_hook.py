@@ -72,6 +72,13 @@ def main():
         root.mkdir(parents=True, exist_ok=True)
         target = root / (safe_id + ".json")
 
+        previous_model_name = None
+        try:
+            with target.open() as previous_file:
+                previous_model_name = json.load(previous_file).get("model_name")
+        except (OSError, ValueError, AttributeError):
+            pass
+
         snapshot = {
             "schema_version": 1,
             "id": conversation_id,
@@ -81,6 +88,18 @@ def main():
             "state": state,
             "updated_at": time.time(),
         }
+        model = data.get("model")
+        model_name = None
+        if isinstance(model, str) and model:
+            model_name = model
+        elif isinstance(model, dict):
+            candidate = model.get("display_name") or model.get("id")
+            if isinstance(candidate, str) and candidate:
+                model_name = candidate
+        if model_name is None and isinstance(previous_model_name, str) and previous_model_name:
+            model_name = previous_model_name
+        if model_name is not None:
+            snapshot["model_name"] = model_name
         if detail:
             snapshot["detail"] = detail
 

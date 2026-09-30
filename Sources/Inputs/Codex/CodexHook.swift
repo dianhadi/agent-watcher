@@ -31,7 +31,7 @@ do {
     } ?? FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Agent Watcher/activities", isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let snapshot: [String: Any] = [
+    var snapshot: [String: Any] = [
         "schema_version": 1,
         "id": id,
         "source_id": "codex-cli",
@@ -41,6 +41,9 @@ do {
         "detail": event == "PermissionRequest" ? (payload["tool_name"] as? String ?? "") : "",
         "updated_at": Date().timeIntervalSince1970
     ]
+    if let modelName = payload["model"] as? String, !modelName.isEmpty {
+        snapshot["model_name"] = modelName
+    }
     let bytes = try JSONSerialization.data(withJSONObject: snapshot)
     let target = folder.appendingPathComponent(safeID + ".json")
     try bytes.write(to: target, options: .atomic)

@@ -49,6 +49,9 @@ def main():
             "detail": data.get("tool_name") if event == "PermissionRequest" else None,
             "updated_at": time.time(),
         }
+        model_name = data.get("model")
+        if isinstance(model_name, str) and model_name:
+            state["model_name"] = model_name
         fd, tmp = tempfile.mkstemp(prefix=".state-", dir=root)
         try:
             with os.fdopen(fd, "w") as out:

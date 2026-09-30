@@ -462,9 +462,18 @@ struct ActivityCard: View {
                     .lineLimit(2)
                 Spacer(minLength: 0)
             }
-            Text(activity.sourceName)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                Text(activity.sourceName)
+                    .font(.caption.bold())
+                if let modelName = activity.modelName, !modelName.isEmpty {
+                    Text("·")
+                    Text(modelName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if !activity.workspace.isEmpty {
                 Text(activity.workspace)
                     .font(.caption2)
@@ -487,7 +496,7 @@ struct ActivityCard: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(.quaternary, lineWidth: 1)
         }
-        .help("Source: \(activity.sourceName)\nActivity: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
+        .help("Source: \(activity.sourceName)\(activity.modelName.map { "\nModel: \($0)" } ?? "")\nActivity: \(activity.id)\(activity.detail.map { "\nDetail: \($0)" } ?? "")")
     }
 }
 

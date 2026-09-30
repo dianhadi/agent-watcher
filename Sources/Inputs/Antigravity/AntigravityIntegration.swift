@@ -228,6 +228,7 @@ final class AntigravityIntegration: AgentIntegration {
             "state": ActivityState.ended.rawValue,
             "updated_at": date.timeIntervalSince1970
         ]
+        if let modelName = snapshot.modelName { object["model_name"] = modelName }
         if let detail = snapshot.detail { object["detail"] = detail }
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               (try? data.write(to: file, options: .atomic)) != nil else { return }

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-version="${VERSION:-0.2.0}"
+version="${VERSION:-0.2.1}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid VERSION: $version" >&2; exit 1; }
 local_build_identity=""
 if [[ -z "${APPLE_APP_IDENTITY:-}" ]]; then

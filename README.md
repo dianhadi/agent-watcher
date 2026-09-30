@@ -19,7 +19,7 @@ agent-native events -> AgentIntegration adapter -> ActivitySnapshot
                          macOS window         menu bar       optional device
 ```
 
-- `ActivitySnapshot` is the persisted, agent-neutral contract. It contains an ID, source, workspace, state, optional non-sensitive detail, and timestamp.
+- `ActivitySnapshot` is the persisted, agent-neutral contract. It contains an ID, source, workspace, state, optional model name and non-sensitive detail, and timestamp.
 - `AgentIntegration` owns agent-specific setup and event translation. `CodexCLIIntegration` and `AntigravityIntegration` are the built-in implementations.
 - `ActivitySummary` converts all activities into a device-neutral `AttentionSignal`.
 - The window and menu bar render that signal. Optional hardware or notification adapters implement `ActivityOutput`; none is required.
@@ -52,6 +52,7 @@ The supported states are `needs_attention`, `running`, `idle`, `ended`, and `unk
   "source_name": "Codex CLI",
   "workspace": "/path/to/project",
   "state": "running",
+  "model_name": "active-model-slug",
   "detail": null,
   "updated_at": 1790298000
 }
@@ -63,7 +64,7 @@ An integration writes one JSON file per activity to:
 ~/Library/Application Support/Agent Watcher/activities
 ```
 
-Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from `Codex Sentinel` remain readable during migration. Integrations must not persist prompts, commands, model output, or complete native event payloads.
+Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from `Codex Sentinel` remain readable during migration. Model names are optional and appear on activity cards when an integration supplies them. Integrations must not persist prompts, commands, model output, or complete native event payloads.
 
 ## Current status rules
 
@@ -102,15 +103,15 @@ Tagged release packages are Developer ID signed, submitted to Apple's notary ser
 For a local build on a Mac with Xcode Command Line Tools:
 
 ```sh
-VERSION=0.2.0 bash build-macos.sh
+VERSION=0.2.1 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.2.0.pkg`. A local build is ad-hoc signed and intended only for development. Because its binary identity changes after a rebuild, the replacement app resets only its own existing Input Monitoring decision once on first launch and registers itself with Launch Services. The user must still explicitly grant access after installation. Developer ID signed release builds keep their stable identity and do not perform this reset. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
+The installer is written to `dist/Agent-Watcher-0.2.1.pkg`. A local build is ad-hoc signed and intended only for development. Because its binary identity changes after a rebuild, the replacement app resets only its own existing Input Monitoring decision once on first launch and registers itself with Launch Services. The user must still explicitly grant access after installation. Developer ID signed release builds keep their stable identity and do not perform this reset. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
 
 The workflow at `.github/workflows/release.yml` has two modes:
 
 - **Actions → Build and release macOS installer → Run workflow** builds a development `.pkg` and stores it as a workflow artifact for 14 days. It does not publish a GitHub Release and may be blocked by Gatekeeper.
-- Pushing a semantic-version tag such as `v0.2.0` builds, signs, notarizes, staples, validates, and publishes the `.pkg` on GitHub Releases.
+- Pushing a semantic-version tag such as `v0.2.1` builds, signs, notarizes, staples, validates, and publishes the `.pkg` on GitHub Releases.
 
 Configure these repository secrets under **Settings → Secrets and variables → Actions** before pushing a release tag:
 
@@ -127,8 +128,8 @@ Configure these repository secrets under **Settings → Secrets and variables �
 Create and publish a release with:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 The workflow uses the version without the `v` prefix for the package filename. It requires all seven secrets for tag builds and has `contents: write` permission so the repository's `GITHUB_TOKEN` can create or update the matching GitHub Release.
