@@ -2,7 +2,7 @@
 
 Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI and Antigravity (Gemini) are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
 
-The Settings window controls integrations independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The Outputs section detects a directly connected Luxafor Flag 2 over USB HID; detection does not claim the device or send light commands.
+The Settings window controls integrations and outputs independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The optional Luxafor Flag 2 output is disabled by default, detects a directly connected device over USB HID, and requests macOS Input Monitoring access only when enabled.
 
 ## Design
 
@@ -74,6 +74,8 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 | At least one item is running | `active` | Blinking green |
 | All active items are idle | `idle` | Solid blue |
 | No active items | `inactive` | Off |
+
+When the Luxafor output is enabled, it renders the same neutral signal directly on the USB light: full attention blinks red, partial attention blinks yellow, running blinks green, idle is solid blue, and inactive is off. Luxafor control is local and does not use its webhook or cloud API. macOS requires Input Monitoring permission before the app can open the HID device; Settings shows the permission state and provides a shortcut to grant it.
 
 Ended activities and snapshots untouched for 12 hours do not count as active. A `running` snapshot without another heartbeat for 10 minutes is treated as stale and hidden; this prevents a missed close hook after a crash, cancellation, quota failure, or machine sleep from leaving a ghost activity. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
 

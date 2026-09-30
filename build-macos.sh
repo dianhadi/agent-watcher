@@ -50,7 +50,7 @@ for arch in arm64 x86_64; do
         Sources/Core/Domain.swift \
         Sources/Inputs/Codex/CodexUsage.swift \
         Sources/Inputs/Antigravity/AntigravityUsage.swift \
-        Sources/Outputs/Luxafor/LuxaforDeviceDetector.swift \
+        Sources/Outputs/Luxafor/LuxaforOutput.swift \
         Sources/App/Sentinel.swift \
         Sources/Inputs/Codex/HookRegistration.swift \
         Sources/Inputs/Antigravity/AntigravityIntegration.swift \

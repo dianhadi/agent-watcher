@@ -60,7 +60,7 @@ struct ActivitySnapshot: Decodable, Identifiable {
 
 /// A small, device-neutral signal derived from all current activities.
 /// A menu bar, USB light, notification service, or future output can render it.
-enum AttentionSignal: String {
+enum AttentionSignal: String, Equatable {
     case inactive
     case idle
     case active
@@ -126,6 +126,7 @@ struct OutputDeviceStatus: Identifiable, Equatable {
     let id: String
     let displayName: String
     let isConnected: Bool
+    let isReady: Bool
     let detail: String
 }
 
@@ -133,6 +134,11 @@ protocol OutputDeviceDetector {
     var id: String { get }
     var displayName: String { get }
     func currentStatus() -> OutputDeviceStatus
+    func requestAccess() -> Bool
+}
+
+extension OutputDeviceDetector {
+    func requestAccess() -> Bool { true }
 }
 
 struct UsageWindow: Identifiable {

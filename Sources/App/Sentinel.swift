@@ -35,17 +35,28 @@ extension ActivitySnapshot {
     @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
     @Published private(set) var outputDeviceStatuses: [OutputDeviceStatus] = []
     @Published private(set) var enabledIntegrationIDs: Set<String> = []
+    @Published private(set) var enabledOutputIDs: Set<String> = []
+    @Published private(set) var outputErrors: [String: String] = [:]
     private var timer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
-    private let outputDeviceDetectors: [any OutputDeviceDetector] = [LuxaforDeviceDetector()]
+    private let outputs: [any ActivityOutput]
+    private let outputDeviceDetectors: [any OutputDeviceDetector]
     private var usageProviders: [String: any AgentUsageProvider] = [:]
     private var lastUsageRefresh = Date.distantPast
     private let defaults = UserDefaults.standard
 
     init() {
+        let luxafor = LuxaforOutput()
+        outputs = [luxafor]
+        outputDeviceDetectors = [luxafor]
         let codexKey = preferenceKey(for: "codex-cli")
         let codexEnabled = defaults.object(forKey: codexKey) as? Bool ?? true
         if codexEnabled { enabledIntegrationIDs.insert("codex-cli") }
+        for output in outputs {
+            if defaults.object(forKey: outputPreferenceKey(for: output.id)) as? Bool ?? false {
+                enabledOutputIDs.insert(output.id)
+            }
+        }
         // Antigravity is intentionally unavailable until its adapter is ready
         // to be enabled from Settings.
         defaults.set(false, forKey: preferenceKey(for: "antigravity"))
@@ -96,6 +107,33 @@ extension ActivitySnapshot {
         refresh()
     }
 
+    func isOutputEnabled(_ id: String) -> Bool {
+        enabledOutputIDs.contains(id)
+    }
+
+    func setOutputEnabled(_ enabled: Bool, id: String) {
+        guard let output = outputs.first(where: { $0.id == id }) else { return }
+        defaults.set(enabled, forKey: outputPreferenceKey(for: id))
+        if enabled {
+            enabledOutputIDs.insert(id)
+            requestOutputAccess(id)
+        } else {
+            try? output.publish(.inactive)
+            enabledOutputIDs.remove(id)
+            outputErrors.removeValue(forKey: id)
+        }
+        refresh()
+    }
+
+    func requestOutputAccess(_ id: String) {
+        guard let detector = outputDeviceDetectors.first(where: { $0.id == id }) else { return }
+        if !detector.requestAccess(),
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
+        }
+        refresh()
+    }
+
     func refresh() {
         integrations.filter { isIntegrationEnabled($0.id) }.forEach { $0.maintain() }
         outputDeviceStatuses = outputDeviceDetectors.map { $0.currentStatus() }
@@ -119,6 +157,7 @@ extension ActivitySnapshot {
             })
             lastUsageRefresh = Date()
         }
+        publishOutputs()
     }
 
     var activitySummary: ActivitySummary { ActivitySummary(activities: activities) }
@@ -152,6 +191,22 @@ extension ActivitySnapshot {
 
     private func preferenceKey(for id: String) -> String {
         "integration.\(id).enabled"
+    }
+
+    private func outputPreferenceKey(for id: String) -> String {
+        "output.\(id).enabled"
+    }
+
+    private func publishOutputs() {
+        for output in outputs where isOutputEnabled(output.id) {
+            do {
+                try output.publish(signal)
+                outputErrors.removeValue(forKey: output.id)
+            } catch {
+                outputErrors[output.id] = error.localizedDescription
+            }
+        }
+        outputDeviceStatuses = outputDeviceDetectors.map { $0.currentStatus() }
     }
 
     private func synchronizeUsageProviders() {
@@ -521,17 +576,34 @@ struct AgentWatcherSettings: View {
             }
             Section("Outputs") {
                 ForEach(store.outputDeviceStatuses) { output in
-                    HStack(spacing: 10) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(output.isConnected ? Color.green : Color.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(output.displayName)
-                            Text(output.detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(isOn: Binding(
+                            get: { store.isOutputEnabled(output.id) },
+                            set: { store.setOutputEnabled($0, id: output.id) }
+                        )) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(
+                                        output.isReady ? Color.green
+                                            : output.isConnected ? Color.orange : Color.secondary
+                                    )
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(output.displayName)
+                                    Text(store.outputErrors[output.id] ?? output.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        Spacer()
+                        .toggleStyle(.checkbox)
+                        if output.isConnected && !output.isReady {
+                            Button("Grant Input Monitoring Access…") {
+                                store.requestOutputAccess(output.id)
+                            }
+                            .font(.caption)
+                            .padding(.leading, 20)
+                        }
                     }
                     .accessibilityElement(children: .combine)
                 }
