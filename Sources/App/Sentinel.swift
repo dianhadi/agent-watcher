@@ -30,6 +30,12 @@ extension ActivitySnapshot {
     }
 }
 
+private enum OutputSuspensionReason: Hashable {
+    case terminating
+    case sessionInactive
+    case screenLocked
+}
+
 @MainActor final class ActivityStore: ObservableObject {
     @Published var activities: [ActivitySnapshot] = []
     @Published var integrationStatus: [String: String] = [:]
@@ -40,6 +46,8 @@ extension ActivitySnapshot {
     @Published private(set) var outputErrors: [String: String] = [:]
     private var timer: Timer?
     private var outputTimer: Timer?
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var outputSuspensionReasons: Set<OutputSuspensionReason> = []
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
     private let outputs: [any ActivityOutput]
     private let outputDeviceDetectors: [any OutputDeviceDetector]
@@ -51,6 +59,7 @@ extension ActivitySnapshot {
         let luxafor = LuxaforOutput()
         outputs = [luxafor]
         outputDeviceDetectors = [luxafor]
+        prepareLocalInputMonitoringIdentity()
         let codexKey = preferenceKey(for: "codex-cli")
         let codexEnabled = defaults.object(forKey: codexKey) as? Bool ?? true
         if codexEnabled { enabledIntegrationIDs.insert("codex-cli") }
@@ -75,6 +84,53 @@ extension ActivitySnapshot {
         }
         self.outputTimer = outputTimer
         RunLoop.main.add(outputTimer, forMode: .common)
+        lifecycleObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.suspendOutputs(for: .terminating)
+            }
+        })
+        let workspaceNotifications = NSWorkspace.shared.notificationCenter
+        lifecycleObservers.append(workspaceNotifications.addObserver(
+            forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.suspendOutputs(for: .sessionInactive)
+            }
+        })
+        lifecycleObservers.append(workspaceNotifications.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resumeOutputs(for: .sessionInactive)
+            }
+        })
+        let distributedNotifications = DistributedNotificationCenter.default()
+        lifecycleObservers.append(distributedNotifications.addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.suspendOutputs(for: .screenLocked)
+            }
+        })
+        lifecycleObservers.append(distributedNotifications.addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resumeOutputs(for: .screenLocked)
+            }
+        })
     }
 
     func installIntegrations() {
@@ -208,7 +264,30 @@ extension ActivitySnapshot {
         "output.\(id).enabled"
     }
 
+    private func prepareLocalInputMonitoringIdentity() {
+        guard let buildIdentity = Bundle.main.object(
+            forInfoDictionaryKey: "AgentWatcherLocalBuildIdentity"
+        ) as? String else { return }
+        let defaultsKey = "input-monitoring.local-build-identity"
+        guard defaults.string(forKey: defaultsKey) != buildIdentity else { return }
+
+        _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        reset.arguments = ["reset", "ListenEvent", "io.github.agent-watcher"]
+        do {
+            try reset.run()
+            reset.waitUntilExit()
+            if reset.terminationStatus == 0 {
+                defaults.set(buildIdentity, forKey: defaultsKey)
+            }
+        } catch {
+            // A failed permission reset must never prevent the app from opening.
+        }
+    }
+
     private func publishOutputs() {
+        guard outputSuspensionReasons.isEmpty else { return }
         for output in outputs where isOutputEnabled(output.id) {
             do {
                 try output.publish(signal)
@@ -221,6 +300,22 @@ extension ActivitySnapshot {
                 }
             }
         }
+    }
+
+    private func turnOffOutputs() {
+        for output in outputs where isOutputEnabled(output.id) {
+            try? output.publish(.inactive)
+        }
+    }
+
+    private func suspendOutputs(for reason: OutputSuspensionReason) {
+        outputSuspensionReasons.insert(reason)
+        turnOffOutputs()
+    }
+
+    private func resumeOutputs(for reason: OutputSuspensionReason) {
+        outputSuspensionReasons.remove(reason)
+        publishOutputs()
     }
 
     private func synchronizeUsageProviders() {

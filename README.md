@@ -75,7 +75,7 @@ Set `AGENT_WATCHER_STATE_DIR` to use another directory. Version 0 snapshots from
 | All active items are idle | `idle` | Solid blue |
 | No active items | `inactive` | Off |
 
-When the Luxafor output is enabled, it renders the same neutral signal directly on the USB light: full attention blinks red, partial attention blinks yellow, running blinks green, idle is solid blue, and inactive is off. Luxafor control is local and does not use its webhook or cloud API. macOS requires Input Monitoring permission before the app can open the HID device; Settings shows the permission state and provides a shortcut to grant it.
+When the Luxafor output is enabled, it renders the same neutral signal directly on the USB light: full attention blinks red, partial attention blinks yellow, running blinks green, idle is solid blue, and inactive is off. Luxafor control is local and does not use its webhook or cloud API. The light turns off when Agent Watcher quits, the screen locks, or the user session becomes inactive. It resumes the current application status when Agent Watcher opens, the screen unlocks, or the session becomes active again. macOS requires Input Monitoring permission before the app can open the HID device; Settings shows the permission state and provides a shortcut to grant it.
 
 Ended activities and snapshots untouched for 12 hours do not count as active. A `running` snapshot without another heartbeat for 10 minutes is treated as stale and hidden; this prevents a missed close hook after a crash, cancellation, quota failure, or machine sleep from leaving a ghost activity. Approvals remain in the originating agent. The current Codex adapter maps its lifecycle hooks to these neutral states; subagents that share a parent session ID remain a single activity.
 
@@ -105,7 +105,7 @@ For a local build on a Mac with Xcode Command Line Tools:
 VERSION=0.2.0 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.2.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
+The installer is written to `dist/Agent-Watcher-0.2.0.pkg`. A local build is ad-hoc signed and intended only for development. Because its binary identity changes after a rebuild, the replacement app resets only its own existing Input Monitoring decision once on first launch and registers itself with Launch Services. The user must still explicitly grant access after installation. Developer ID signed release builds keep their stable identity and do not perform this reset. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
 
 The workflow at `.github/workflows/release.yml` has two modes:
 

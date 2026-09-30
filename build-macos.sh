@@ -4,6 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 version="${VERSION:-0.2.0}"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid VERSION: $version" >&2; exit 1; }
+local_build_identity=""
+if [[ -z "${APPLE_APP_IDENTITY:-}" ]]; then
+    local_build_identity="$(uuidgen)"
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 stage="$work/root"
@@ -29,6 +33,11 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+if [[ -n "$local_build_identity" ]]; then
+    /usr/libexec/PlistBuddy -c \
+        "Add :AgentWatcherLocalBuildIdentity string $local_build_identity" \
+        "$app/Contents/Info.plist"
+fi
 
 icon_images="$work/AppIcon"
 mkdir -p "$icon_images"
