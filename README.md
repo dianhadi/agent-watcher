@@ -2,7 +2,7 @@
 
 Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI and Antigravity (Gemini) are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
 
-The Settings window controls integrations independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The Outputs section is reserved for optional destinations such as Luxafor.
+The Settings window controls integrations independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The Outputs section detects a directly connected Luxafor Flag 2 over USB HID; detection does not claim the device or send light commands.
 
 ## Design
 
@@ -100,15 +100,15 @@ Tagged release packages are Developer ID signed, submitted to Apple's notary ser
 For a local build on a Mac with Xcode Command Line Tools:
 
 ```sh
-VERSION=0.1.2 bash build-macos.sh
+VERSION=0.2.0 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.1.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
+The installer is written to `dist/Agent-Watcher-0.2.0.pkg`. A local build is ad-hoc signed and intended only for development. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
 
 The workflow at `.github/workflows/release.yml` has two modes:
 
 - **Actions → Build and release macOS installer → Run workflow** builds a development `.pkg` and stores it as a workflow artifact for 14 days. It does not publish a GitHub Release and may be blocked by Gatekeeper.
-- Pushing a semantic-version tag such as `v0.1.0` builds, signs, notarizes, staples, validates, and publishes the `.pkg` on GitHub Releases.
+- Pushing a semantic-version tag such as `v0.2.0` builds, signs, notarizes, staples, validates, and publishes the `.pkg` on GitHub Releases.
 
 Configure these repository secrets under **Settings → Secrets and variables → Actions** before pushing a release tag:
 
@@ -125,8 +125,8 @@ Configure these repository secrets under **Settings → Secrets and variables �
 Create and publish a release with:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The workflow uses the version without the `v` prefix for the package filename. It requires all seven secrets for tag builds and has `contents: write` permission so the repository's `GITHUB_TOKEN` can create or update the matching GitHub Release.

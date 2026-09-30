@@ -33,9 +33,11 @@ extension ActivitySnapshot {
     @Published var activities: [ActivitySnapshot] = []
     @Published var integrationStatus: [String: String] = [:]
     @Published var usageBySource: [String: AgentUsageSnapshot] = [:]
+    @Published private(set) var outputDeviceStatuses: [OutputDeviceStatus] = []
     @Published private(set) var enabledIntegrationIDs: Set<String> = []
     private var timer: Timer?
     private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
+    private let outputDeviceDetectors: [any OutputDeviceDetector] = [LuxaforDeviceDetector()]
     private var usageProviders: [String: any AgentUsageProvider] = [:]
     private var lastUsageRefresh = Date.distantPast
     private let defaults = UserDefaults.standard
@@ -96,6 +98,7 @@ extension ActivitySnapshot {
 
     func refresh() {
         integrations.filter { isIntegrationEnabled($0.id) }.forEach { $0.maintain() }
+        outputDeviceStatuses = outputDeviceDetectors.map { $0.currentStatus() }
         let folders = [StateLocation.current, StateLocation.legacy]
         let files = folders.flatMap {
             (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil)) ?? []
@@ -517,13 +520,26 @@ struct AgentWatcherSettings: View {
                 .disabled(true)
             }
             Section("Outputs") {
-                Text("No outputs configured")
-                    .foregroundStyle(.secondary)
+                ForEach(store.outputDeviceStatuses) { output in
+                    HStack(spacing: 10) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(output.isConnected ? Color.green : Color.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(output.displayName)
+                            Text(output.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
             }
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 430, height: 260)
+        .frame(width: 430, height: 290)
     }
 }
 

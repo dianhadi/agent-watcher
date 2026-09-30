@@ -120,6 +120,21 @@ protocol ActivityOutput {
     func publish(_ signal: AttentionSignal) throws
 }
 
+/// A transient, device-neutral view of optional output hardware. Connection
+/// state is discovered at runtime and is never persisted as activity data.
+struct OutputDeviceStatus: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let isConnected: Bool
+    let detail: String
+}
+
+protocol OutputDeviceDetector {
+    var id: String { get }
+    var displayName: String { get }
+    func currentStatus() -> OutputDeviceStatus
+}
+
 struct UsageWindow: Identifiable {
     let id: String
     let name: String
