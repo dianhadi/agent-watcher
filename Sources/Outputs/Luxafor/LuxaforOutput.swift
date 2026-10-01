@@ -23,7 +23,7 @@ enum LuxaforOutputError: LocalizedError {
 
 /// Discovers and controls a directly connected Luxafor Flag over USB HID.
 /// Flag and Flag 2 expose the same VID, PID, and eight-byte output report.
-final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
+final class LuxaforOutput: BrightnessAdjustableOutput, OutputDeviceDetector {
     let id = "luxafor-flag"
     let displayName = "Luxafor Flag 2"
 
@@ -31,11 +31,13 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
     private static let productID = 0xF372
     private static let allLEDs: UInt8 = 0xFF
     private let manager: IOHIDManager
+    private(set) var brightness: Double
     private var lastSignal: AttentionSignal?
     private var lastIlluminated: Bool?
     private var lastPublishDate = Date.distantPast
 
-    init() {
+    init(brightness: Double = 1) {
+        self.brightness = min(max(brightness, 0), 1)
         manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         let matching: [String: Any] = [
             kIOHIDVendorIDKey as String: Self.vendorID,
@@ -81,6 +83,15 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
     }
 
+    func setBrightness(_ value: Double) {
+        let clamped = min(max(value, 0), 1)
+        guard clamped != brightness else { return }
+        brightness = clamped
+        // Force the next output tick to apply the new intensity even when the
+        // activity signal itself has not changed.
+        lastSignal = nil
+    }
+
     func publish(_ signal: AttentionSignal) throws {
         let now = Date()
         let illuminated = signal.isLit(at: now)
@@ -88,7 +99,7 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         guard signal != lastSignal || illuminated != lastIlluminated || needsReassertion else {
             return
         }
-        try send(Self.report(for: signal, illuminated: illuminated))
+        try send(Self.report(for: signal, illuminated: illuminated, brightness: brightness))
         lastSignal = signal
         lastIlluminated = illuminated
         lastPublishDate = now
@@ -135,7 +146,11 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         return Unmanaged<IOHIDDevice>.fromOpaque(pointer).takeUnretainedValue()
     }
 
-    private static func report(for signal: AttentionSignal, illuminated: Bool) -> [UInt8] {
+    private static func report(
+        for signal: AttentionSignal,
+        illuminated: Bool,
+        brightness: Double
+    ) -> [UInt8] {
         if signal.isBlinking && !illuminated {
             return solid(red: 0, green: 0, blue: 0)
         }
@@ -143,14 +158,22 @@ final class LuxaforOutput: ActivityOutput, OutputDeviceDetector {
         case .inactive:
             return solid(red: 0, green: 0, blue: 0)
         case .idle:
-            return solid(red: 0, green: 0, blue: 255)
+            return solid(red: 0, green: 0, blue: scaled(255, by: brightness))
         case .active:
-            return solid(red: 0, green: 255, blue: 0)
+            return solid(red: 0, green: scaled(255, by: brightness), blue: 0)
         case .partialAttention:
-            return solid(red: 255, green: 255, blue: 0)
+            return solid(
+                red: scaled(255, by: brightness),
+                green: scaled(255, by: brightness),
+                blue: 0
+            )
         case .fullAttention:
-            return solid(red: 255, green: 0, blue: 0)
+            return solid(red: scaled(255, by: brightness), green: 0, blue: 0)
         }
+    }
+
+    private static func scaled(_ component: UInt8, by brightness: Double) -> UInt8 {
+        UInt8((Double(component) * min(max(brightness, 0), 1)).rounded())
     }
 
     private static func solid(red: UInt8, green: UInt8, blue: UInt8) -> [UInt8] {

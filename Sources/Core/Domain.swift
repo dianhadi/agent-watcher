@@ -130,6 +130,13 @@ protocol ActivityOutput {
     func publish(_ signal: AttentionSignal) throws
 }
 
+/// Optional capability for outputs whose intensity can be adjusted without
+/// changing the neutral activity signal they render.
+protocol BrightnessAdjustableOutput: ActivityOutput {
+    var brightness: Double { get }
+    func setBrightness(_ value: Double)
+}
+
 /// A transient, device-neutral view of optional output hardware. Connection
 /// state is discovered at runtime and is never persisted as activity data.
 struct OutputDeviceStatus: Identifiable, Equatable {

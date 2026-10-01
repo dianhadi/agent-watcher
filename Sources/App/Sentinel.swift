@@ -43,6 +43,7 @@ private enum OutputSuspensionReason: Hashable {
     @Published private(set) var outputDeviceStatuses: [OutputDeviceStatus] = []
     @Published private(set) var enabledIntegrationIDs: Set<String> = []
     @Published private(set) var enabledOutputIDs: Set<String> = []
+    @Published private(set) var outputBrightnessByID: [String: Double] = [:]
     @Published private(set) var outputErrors: [String: String] = [:]
     private var timer: Timer?
     private var outputTimer: Timer?
@@ -56,9 +57,14 @@ private enum OutputSuspensionReason: Hashable {
     private let defaults = UserDefaults.standard
 
     init() {
-        let luxafor = LuxaforOutput()
+        let luxaforID = "luxafor-flag"
+        let savedBrightness = defaults.object(
+            forKey: Self.outputBrightnessPreferenceKey(for: luxaforID)
+        ) as? NSNumber
+        let luxafor = LuxaforOutput(brightness: savedBrightness?.doubleValue ?? 1)
         outputs = [luxafor]
         outputDeviceDetectors = [luxafor]
+        outputBrightnessByID[luxaforID] = luxafor.brightness
         prepareLocalInputMonitoringIdentity()
         let codexKey = preferenceKey(for: "codex-cli")
         let codexEnabled = defaults.object(forKey: codexKey) as? Bool ?? true
@@ -174,6 +180,24 @@ private enum OutputSuspensionReason: Hashable {
         enabledOutputIDs.contains(id)
     }
 
+    func supportsOutputBrightness(_ id: String) -> Bool {
+        outputBrightnessByID[id] != nil
+    }
+
+    func outputBrightness(_ id: String) -> Double {
+        outputBrightnessByID[id] ?? 1
+    }
+
+    func setOutputBrightness(_ brightness: Double, id: String) {
+        let clamped = min(max(brightness, 0), 1)
+        guard let output = outputs.first(where: { $0.id == id }) as? any BrightnessAdjustableOutput else {
+            return
+        }
+        defaults.set(clamped, forKey: Self.outputBrightnessPreferenceKey(for: id))
+        outputBrightnessByID[id] = clamped
+        output.setBrightness(clamped)
+    }
+
     func setOutputEnabled(_ enabled: Bool, id: String) {
         guard let output = outputs.first(where: { $0.id == id }) else { return }
         defaults.set(enabled, forKey: outputPreferenceKey(for: id))
@@ -262,6 +286,10 @@ private enum OutputSuspensionReason: Hashable {
 
     private func outputPreferenceKey(for id: String) -> String {
         "output.\(id).enabled"
+    }
+
+    private static func outputBrightnessPreferenceKey(for id: String) -> String {
+        "output.\(id).brightness"
     }
 
     private func prepareLocalInputMonitoringIdentity() {
@@ -714,6 +742,21 @@ struct AgentWatcherSettings: View {
                             }
                         }
                         .toggleStyle(.checkbox)
+                        if store.supportsOutputBrightness(output.id) {
+                            HStack(spacing: 10) {
+                                Text("Brightness")
+                                    .font(.caption)
+                                Slider(value: Binding(
+                                    get: { store.outputBrightness(output.id) },
+                                    set: { store.setOutputBrightness($0, id: output.id) }
+                                ), in: 0...1, step: 0.05)
+                                Text("\(Int((store.outputBrightness(output.id) * 100).rounded()))%")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 38, alignment: .trailing)
+                            }
+                            .padding(.leading, 20)
+                        }
                         if output.isConnected && !output.isReady {
                             Button("Grant Input Monitoring Access…") {
                                 store.requestOutputAccess(output.id)
@@ -722,13 +765,13 @@ struct AgentWatcherSettings: View {
                             .padding(.leading, 20)
                         }
                     }
-                    .accessibilityElement(children: .combine)
+                    .accessibilityElement(children: .contain)
                 }
             }
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 430, height: 290)
+        .frame(width: 430, height: 330)
     }
 }
 
