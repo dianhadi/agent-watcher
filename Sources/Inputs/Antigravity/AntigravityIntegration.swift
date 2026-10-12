@@ -37,12 +37,6 @@ final class AntigravityIntegration: AgentIntegration {
         let commandPath = shellQuote(executable.path)
         let expectedWatcherConfig: [String: Any] = [
             "enabled": true,
-            "SessionStart": [
-                ["type": "command", "command": "\(commandPath) SessionStart", "timeout": 3]
-            ],
-            "SessionEnd": [
-                ["type": "command", "command": "\(commandPath) SessionEnd", "timeout": 3]
-            ],
             "PreInvocation": [
                 ["type": "command", "command": "\(commandPath) PreInvocation", "timeout": 3]
             ],
@@ -121,7 +115,7 @@ final class AntigravityIntegration: AgentIntegration {
             if var settings = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let statusLine = settings["statusLine"] as? [String: Any],
                let command = statusLine["command"] as? String,
-               command.contains("Agent Watcher.app"), command.contains("AntigravityHook"),
+               command.contains("AntigravityHook"),
                command.contains("StatusLine") {
                 settings.removeValue(forKey: "statusLine")
                 try backUpAndWrite(settings, file: settingsFile, directory: settingsDirectory)

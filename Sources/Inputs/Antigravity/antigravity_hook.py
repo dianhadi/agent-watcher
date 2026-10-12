@@ -56,8 +56,8 @@ def main():
             state = "running"
         elif event == "PreToolUse":
             tool_call = data.get("toolCall") or {}
-            tool_name = tool_call.get("name") or data.get("tool_name") or "tool approval"
-            state = "needs_attention"
+            tool_name = tool_call.get("name") or data.get("tool_name")
+            state = "running"
             detail = tool_name
         elif event == "PostToolUse":
             state = "running"
@@ -73,18 +73,23 @@ def main():
         target = root / (safe_id + ".json")
 
         previous_model_name = None
+        previous_workspace = ""
         try:
             with target.open() as previous_file:
-                previous_model_name = json.load(previous_file).get("model_name")
+                prev_data = json.load(previous_file)
+                previous_model_name = prev_data.get("model_name")
+                previous_workspace = prev_data.get("workspace", "")
         except (OSError, ValueError, AttributeError):
             pass
+
+        resolved_workspace = workspace if workspace else previous_workspace
 
         snapshot = {
             "schema_version": 1,
             "id": conversation_id,
             "source_id": "antigravity",
             "source_name": "Antigravity",
-            "workspace": workspace,
+            "workspace": resolved_workspace,
             "state": state,
             "updated_at": time.time(),
         }

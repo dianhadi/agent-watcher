@@ -69,14 +69,14 @@ private enum OutputSuspensionReason: Hashable {
         let codexKey = preferenceKey(for: "codex-cli")
         let codexEnabled = defaults.object(forKey: codexKey) as? Bool ?? true
         if codexEnabled { enabledIntegrationIDs.insert("codex-cli") }
+        let antigravityKey = preferenceKey(for: "antigravity")
+        let antigravityEnabled = defaults.object(forKey: antigravityKey) as? Bool ?? false
+        if antigravityEnabled { enabledIntegrationIDs.insert("antigravity") }
         for output in outputs {
             if defaults.object(forKey: outputPreferenceKey(for: output.id)) as? Bool ?? false {
                 enabledOutputIDs.insert(output.id)
             }
         }
-        // Antigravity is intentionally unavailable until its adapter is ready
-        // to be enabled from Settings.
-        defaults.set(false, forKey: preferenceKey(for: "antigravity"))
         synchronizeUsageProviders()
         installIntegrations()
         refresh()
@@ -159,7 +159,6 @@ private enum OutputSuspensionReason: Hashable {
     }
 
     func setIntegrationEnabled(_ enabled: Bool, id: String) {
-        guard id != "antigravity" else { return }
         defaults.set(enabled, forKey: preferenceKey(for: id))
         if enabled { enabledIntegrationIDs.insert(id) }
         else { enabledIntegrationIDs.remove(id) }
@@ -696,6 +695,13 @@ struct AgentWatcherSettings: View {
         )
     }
 
+    private var antigravityBinding: Binding<Bool> {
+        Binding(
+            get: { store.isIntegrationEnabled("antigravity") },
+            set: { store.setIntegrationEnabled($0, id: "antigravity") }
+        )
+    }
+
     var body: some View {
         Form {
             Section("Agents") {
@@ -708,16 +714,15 @@ struct AgentWatcherSettings: View {
                     }
                 }
                 .toggleStyle(.checkbox)
-                Toggle(isOn: .constant(false)) {
+                Toggle(isOn: antigravityBinding) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Antigravity")
-                        Text("Temporarily unavailable")
+                        Text("Monitor activity and account usage")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.checkbox)
-                .disabled(true)
             }
             Section("Outputs") {
                 ForEach(store.outputDeviceStatuses) { output in

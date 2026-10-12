@@ -116,12 +116,10 @@ final class AntigravityUsageProvider: AgentUsageProvider {
 
     private func statusLineSnapshot(from object: [String: Any]) -> AgentUsageSnapshot? {
         guard let quotas = object["quota"] as? [String: Any] else { return nil }
-        let formatter = ISO8601DateFormatter()
         let windows = quotas.compactMap { key, value -> UsageWindow? in
             guard let quota = value as? [String: Any],
                   let remaining = number(quota["remaining_fraction"]),
-                  let resetText = quota["reset_time"] as? String,
-                  let reset = formatter.date(from: resetText) else { return nil }
+                  let reset = parseDate(quota["reset_time"]) else { return nil }
             let lower = key.lowercased()
             let duration = lower.contains("weekly") ? 10_080 : 300
             let name = key.split(separator: "-")
@@ -216,8 +214,7 @@ final class AntigravityUsageProvider: AgentUsageProvider {
             guard let rawLabel = config["label"] as? String,
                   let quota = config["quotaInfo"] as? [String: Any],
                   let remaining = number(quota["remainingFraction"]),
-                  let resetText = quota["resetTime"] as? String,
-                  let reset = ISO8601DateFormatter().date(from: resetText) else { continue }
+                  let reset = parseDate(quota["resetTime"]) else { continue }
             let label = poolName(for: rawLabel)
             let window = UsageWindow(
                 id: label.lowercased().replacingOccurrences(of: " ", with: "-"),
@@ -249,6 +246,23 @@ final class AntigravityUsageProvider: AgentUsageProvider {
         if lower.contains("gemini") && lower.contains("pro") { return "Gemini Pro" }
         if lower.contains("gemini") && lower.contains("flash") { return "Gemini Flash" }
         return "Claude"
+    }
+
+    private static let isoFormatter = ISO8601DateFormatter()
+    private static let fractionalIsoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private func parseDate(_ value: Any?) -> Date? {
+        if let text = value as? String {
+            return Self.fractionalIsoFormatter.date(from: text) ?? Self.isoFormatter.date(from: text)
+        }
+        if let epoch = number(value) {
+            return Date(timeIntervalSince1970: epoch)
+        }
+        return nil
     }
 
     private func number(_ value: Any?) -> Double? {

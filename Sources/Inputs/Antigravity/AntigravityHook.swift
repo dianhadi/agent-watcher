@@ -63,25 +63,32 @@ func writeActivitySnapshot(
             .appendingPathComponent("Library/Application Support/Agent Watcher/activities", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let target = folder.appendingPathComponent(safeID + ".json")
-        let previousModelName: String? = {
-            guard modelName == nil,
-                  let bytes = try? Data(contentsOf: target),
+        let existingSnapshot: [String: Any]? = {
+            guard let bytes = try? Data(contentsOf: target),
                   let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
                 return nil
             }
-            return object["model_name"] as? String
+            return object
+        }()
+        let resolvedWorkspace: String = {
+            if !workspace.isEmpty { return workspace }
+            return (existingSnapshot?["workspace"] as? String) ?? ""
+        }()
+        let resolvedModelName: String? = {
+            if let modelName, !modelName.isEmpty { return modelName }
+            return existingSnapshot?["model_name"] as? String
         }()
         var snapshot: [String: Any] = [
             "schema_version": 1,
             "id": id,
             "source_id": "antigravity",
             "source_name": "Antigravity",
-            "workspace": workspace,
+            "workspace": resolvedWorkspace,
             "state": state,
             "updated_at": Date().timeIntervalSince1970
         ]
-        if let modelName = modelName ?? previousModelName, !modelName.isEmpty {
-            snapshot["model_name"] = modelName
+        if let resolvedModelName, !resolvedModelName.isEmpty {
+            snapshot["model_name"] = resolvedModelName
         }
         if let detail { snapshot["detail"] = detail }
         let bytes = try JSONSerialization.data(withJSONObject: snapshot)
@@ -211,8 +218,7 @@ do {
         let toolCall = payload["toolCall"] as? [String: Any]
         let toolName = toolCall?["name"] as? String
             ?? (payload["tool_name"] as? String)
-            ?? "tool approval"
-        state = "needs_attention"
+        state = "running"
         detail = toolName
     case "PostToolUse":
         state = "running"
