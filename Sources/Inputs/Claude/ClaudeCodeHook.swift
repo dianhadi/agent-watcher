@@ -15,7 +15,6 @@ do {
     let input = FileHandle.standardInput.readDataToEndOfFile()
     guard let payload = try JSONSerialization.jsonObject(with: input) as? [String: Any],
           let event = payload["hook_event_name"] as? String,
-          let state = stateByEvent[event],
           let id = payload["session_id"] as? String, !id.isEmpty else { exit(0) }
     let safeID = String(id.unicodeScalars.filter {
         CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_"
@@ -26,18 +25,29 @@ do {
     } ?? FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Agent Watcher/activities", isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let snapshot: [String: Any] = [
+    let target = folder.appendingPathComponent("claude-" + safeID + ".json")
+    let existingSnapshot: [String: Any] = {
+        guard let bytes = try? Data(contentsOf: target),
+              let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return [:] }
+        return value
+    }()
+    let modelName = payload["to_model"] as? String ?? payload["model"] as? String
+    guard let state = stateByEvent[event] ?? (event == "PostModelSwitch" ? (existingSnapshot["state"] as? String ?? "running") : nil),
+          event != "PostModelSwitch" || modelName != nil else { exit(0) }
+    let resolvedModel = modelName ?? existingSnapshot["model_name"] as? String
+    var snapshot: [String: Any] = [
         "schema_version": 1,
         "id": id,
         "source_id": "claude-code",
         "source_name": "Claude Code",
-        "workspace": payload["cwd"] as? String ?? "",
+        "workspace": payload["cwd"] as? String ?? existingSnapshot["workspace"] as? String ?? "",
         "state": state,
-        "detail": event == "PermissionRequest" ? (payload["tool_name"] as? String ?? "") : "",
         "updated_at": Date().timeIntervalSince1970
     ]
+    if event == "PermissionRequest" { snapshot["detail"] = payload["tool_name"] as? String ?? "" }
+    else if let detail = existingSnapshot["detail"] as? String, !detail.isEmpty { snapshot["detail"] = detail }
+    if let resolvedModel, !resolvedModel.isEmpty { snapshot["model_name"] = resolvedModel }
     let bytes = try JSONSerialization.data(withJSONObject: snapshot)
-    let target = folder.appendingPathComponent("claude-" + safeID + ".json")
     try bytes.write(to: target, options: .atomic)
     _ = chmod(target.path, 0o600)
 } catch {

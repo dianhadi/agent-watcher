@@ -7,7 +7,7 @@ struct ClaudeCodeIntegration: AgentIntegration {
 
     private static let events = [
         "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
-        "PermissionRequest", "Stop", "SessionEnd"
+        "PermissionRequest", "Stop", "SessionEnd", "PostModelSwitch"
     ]
 
     func install() throws -> String {
