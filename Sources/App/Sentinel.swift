@@ -49,7 +49,7 @@ private enum OutputSuspensionReason: Hashable {
     private var outputTimer: Timer?
     private var lifecycleObservers: [NSObjectProtocol] = []
     private var outputSuspensionReasons: Set<OutputSuspensionReason> = []
-    private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration()]
+    private let integrations: [any AgentIntegration] = [CodexCLIIntegration(), AntigravityIntegration(), ClaudeCodeIntegration()]
     private let outputs: [any ActivityOutput]
     private let outputDeviceDetectors: [any OutputDeviceDetector]
     private var usageProviders: [String: any AgentUsageProvider] = [:]
@@ -72,6 +72,8 @@ private enum OutputSuspensionReason: Hashable {
         let antigravityKey = preferenceKey(for: "antigravity")
         let antigravityEnabled = defaults.object(forKey: antigravityKey) as? Bool ?? false
         if antigravityEnabled { enabledIntegrationIDs.insert("antigravity") }
+        let claudeEnabled = defaults.object(forKey: preferenceKey(for: "claude-code")) as? Bool ?? false
+        if claudeEnabled { enabledIntegrationIDs.insert("claude-code") }
         for output in outputs {
             if defaults.object(forKey: outputPreferenceKey(for: output.id)) as? Bool ?? false {
                 enabledOutputIDs.insert(output.id)
@@ -702,6 +704,13 @@ struct AgentWatcherSettings: View {
         )
     }
 
+    private var claudeBinding: Binding<Bool> {
+        Binding(
+            get: { store.isIntegrationEnabled("claude-code") },
+            set: { store.setIntegrationEnabled($0, id: "claude-code") }
+        )
+    }
+
     var body: some View {
         Form {
             Section("Agents") {
@@ -718,6 +727,15 @@ struct AgentWatcherSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Antigravity")
                         Text("Monitor activity and account usage")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                Toggle(isOn: claudeBinding) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Claude Code")
+                        Text("Monitor activity; account usage is not available")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

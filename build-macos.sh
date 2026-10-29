@@ -59,6 +59,7 @@ for arch in arm64 x86_64; do
         Sources/Core/Domain.swift \
         Sources/Inputs/Codex/CodexUsage.swift \
         Sources/Inputs/Antigravity/AntigravityUsage.swift \
+        Sources/Inputs/Claude/ClaudeCodeIntegration.swift \
         Sources/Outputs/Luxafor/LuxaforOutput.swift \
         Sources/App/Sentinel.swift \
         Sources/Inputs/Codex/HookRegistration.swift \
@@ -68,18 +69,23 @@ for arch in arm64 x86_64; do
         Sources/Inputs/Codex/CodexHook.swift -o "$work/hook-$arch"
     swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" \
         Sources/Inputs/Antigravity/AntigravityHook.swift -o "$work/antigravity-hook-$arch"
+    swiftc -O -sdk "$sdk" -target "$arch-apple-macosx13.0" \
+        Sources/Inputs/Claude/ClaudeCodeHook.swift -o "$work/claude-code-hook-$arch"
 done
 lipo -create "$work/app-arm64" "$work/app-x86_64" -output "$app/Contents/MacOS/AgentWatcher"
 lipo -create "$work/hook-arm64" "$work/hook-x86_64" -output "$app/Contents/MacOS/CodexHook"
 lipo -create "$work/antigravity-hook-arm64" "$work/antigravity-hook-x86_64" -output "$app/Contents/MacOS/AntigravityHook"
+lipo -create "$work/claude-code-hook-arm64" "$work/claude-code-hook-x86_64" -output "$app/Contents/MacOS/ClaudeCodeHook"
 
 if [[ -n "${APPLE_APP_IDENTITY:-}" ]]; then
     codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app/Contents/MacOS/CodexHook"
     codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app/Contents/MacOS/AntigravityHook"
+    codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app/Contents/MacOS/ClaudeCodeHook"
     codesign --force --options runtime --timestamp --sign "$APPLE_APP_IDENTITY" "$app"
 else
     codesign --force --sign - "$app/Contents/MacOS/CodexHook"
     codesign --force --sign - "$app/Contents/MacOS/AntigravityHook"
+    codesign --force --sign - "$app/Contents/MacOS/ClaudeCodeHook"
     codesign --force --sign - "$app"
 fi
 codesign --verify --deep --strict "$app"

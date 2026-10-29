@@ -1,8 +1,8 @@
 # Agent Watcher
 
-Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI and Antigravity (Gemini) are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
+Native macOS dashboard and menu bar app for observing AI-agent activity. Agent Watcher is designed around an agent-neutral activity contract and does not require external hardware. Codex CLI, Antigravity (Gemini), and Claude Code are the built-in input integrations; other agents can be added without changing the dashboard or status rules.
 
-The Settings window controls integrations and outputs independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity is currently shown as unavailable and remains disabled by default; Agent Watcher removes only its own previously managed hooks and status-line collector while preserving unrelated Antigravity configuration. The optional Luxafor Flag 2 output is disabled by default, detects a directly connected device over USB HID, and requests macOS Input Monitoring access only when enabled.
+The Settings window controls integrations and outputs independently. Codex CLI is enabled by default and can be toggled at any time. Antigravity and Claude Code are disabled by default. Agent Watcher removes only its own previously managed hooks while preserving unrelated configuration. Claude Code activity monitoring does not read or display account usage. The optional Luxafor Flag 2 output is disabled by default, detects a directly connected device over USB HID, and requests macOS Input Monitoring access only when enabled.
 
 ## Design
 
@@ -20,7 +20,7 @@ agent-native events -> AgentIntegration adapter -> ActivitySnapshot
 ```
 
 - `ActivitySnapshot` is the persisted, agent-neutral contract. It contains an ID, source, workspace, state, optional model name and non-sensitive detail, and timestamp.
-- `AgentIntegration` owns agent-specific setup and event translation. `CodexCLIIntegration` and `AntigravityIntegration` are the built-in implementations.
+- `AgentIntegration` owns agent-specific setup and event translation. Codex CLI, Antigravity, and Claude Code are the built-in implementations.
 - `ActivitySummary` converts all activities into a device-neutral `AttentionSignal`.
 - The window and menu bar render that signal. Optional hardware or notification adapters implement `ActivityOutput`; none is required.
 - Integrations can optionally provide account-level allowance data through `AgentUsageProvider`; usage is not modeled as a per-session quota when sessions share the same account limit.
@@ -84,7 +84,7 @@ Antigravity activity state is also synchronized from its official status-line pa
 
 The dashboard presents activities as a board: idle work appears in **Backlog**, running work in **In Development**, attention requests in **Blocker**, and completed work in **Ended**. Ended cards are automatically removed from the board and menu after 10 minutes; no manual refresh is required.
 
-The Codex adapter also displays the latest five-hour and weekly allowance found in local Codex session metadata. Antigravity model allowances are read from the quota fields in its official status-line payload and passed directly to the running Agent Watcher process. Agent Watcher installs this collector only when no custom Antigravity status-line command is already configured, keeps the built-in status line visible, and never replaces a user command. The adapter retains only model quota names, remaining fractions, reset times, and the plan name; it does not retain the payload, email, prompts, commands, model responses, or credentials. As a compatibility fallback, an Antigravity hook may pass local-service connection details directly to the running app; these remain only in memory. If usage metadata is absent or changes format, activity monitoring continues without the usage card.
+The Codex adapter also displays the latest five-hour and weekly allowance found in local Codex session metadata. Antigravity model allowances are read from the quota fields in its official status-line payload and passed directly to the running Agent Watcher process. Agent Watcher installs this collector only when no custom Antigravity status-line command is already configured, keeps the built-in status line visible, and never replaces a user command. The adapter retains only model quota names, remaining fractions, reset times, and the plan name; it does not retain the payload, email, prompts, commands, model responses, or credentials. As a compatibility fallback, an Antigravity hook may pass local-service connection details directly to the running app; these remain only in memory. Claude Code provides activity monitoring only; no Claude account usage allowance is read. If usage metadata is absent or changes format, activity monitoring continues without the usage card.
 
 ## Install from GitHub Releases
 
@@ -106,7 +106,7 @@ For a local build on a Mac with Xcode Command Line Tools:
 VERSION=0.2.1 bash build-macos.sh
 ```
 
-The installer is written to `dist/Agent-Watcher-0.2.1.pkg`. A local build is ad-hoc signed and intended only for development. Because its binary identity changes after a rebuild, the replacement app resets only its own existing Input Monitoring decision once on first launch and registers itself with Launch Services. The user must still explicitly grant access after installation. Developer ID signed release builds keep their stable identity and do not perform this reset. On first launch, adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI and `~/.gemini/config/hooks.json` for Antigravity), preserving existing hooks and making a backup when changing files.
+The installer is written to `dist/Agent-Watcher-0.2.1.pkg`. A local build is ad-hoc signed and intended only for development. Because its binary identity changes after a rebuild, the replacement app resets only its own existing Input Monitoring decision once on first launch and registers itself with Launch Services. The user must still explicitly grant access after installation. Developer ID signed release builds keep their stable identity and do not perform this reset. On first launch, enabled adapters configure their lifecycle hooks (`~/.codex/hooks.json` for Codex CLI, `~/.gemini/config/hooks.json` for Antigravity, and `~/.claude/settings.json` for Claude Code), preserving existing hooks and making a backup when changing files.
 
 The workflow at `.github/workflows/release.yml` has two modes:
 
